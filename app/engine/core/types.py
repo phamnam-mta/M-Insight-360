@@ -35,3 +35,7 @@ class RuleResult:
     threshold: str | None = None
     formula: str | None = None
     comment: str = ""
+    observed_value: float | str | None = None
+    policy_version: str | None = None
+    verification_question: str | None = None
+    recommended_action: str | None = None

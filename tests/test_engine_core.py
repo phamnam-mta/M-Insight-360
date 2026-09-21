@@ -25,3 +25,24 @@ def test_rule_result_defaults():
     assert r.evidence == []
     assert r.severity is None
     assert r.comment == ""
+    assert r.observed_value is None
+    assert r.policy_version is None
+    assert r.verification_question is None
+    assert r.recommended_action is None
+
+
+def test_rule_result_carries_spec_mandated_fields():
+    r = RuleResult(
+        rule_id="RF05",
+        rule_name="Kha nang tra no yeu",
+        status="KICH_HOAT",
+        severity="CRITICAL",
+        observed_value=0.85,
+        policy_version="policy_mode=DEMO_UAT",
+        verification_question="DSCR co duoc tinh tu CFADS 12 thang gan nhat khong?",
+        recommended_action="Yeu cau bo sung ke hoach tra no chi tiet",
+    )
+    assert r.observed_value == 0.85
+    assert r.policy_version == "policy_mode=DEMO_UAT"
+    assert "DSCR" in r.verification_question
+    assert "bo sung" in r.recommended_action
