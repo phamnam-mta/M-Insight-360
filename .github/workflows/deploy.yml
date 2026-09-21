@@ -1,0 +1,125 @@
+name: Deploy to GreenNode AgentBase
+
+on:
+  push:
+    branches:
+      - main
+      - "claude/**"
+  workflow_dispatch: {}
+
+env:
+  RUNTIME_NAME: m-insight-360
+  FLAVOR: 1x1-general
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    env:
+      GREENNODE_CLIENT_ID: ${{ secrets.GREENNODE_CLIENT_ID }}
+      GREENNODE_CLIENT_SECRET: ${{ secrets.GREENNODE_CLIENT_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t "${RUNTIME_NAME}:${GITHUB_SHA}" .
+
+      - name: Get Container Registry repo info
+        id: cr
+        run: |
+          bash .claude/skills/agentbase/scripts/cr.sh repo get > cr_repo.json
+          echo "registry=$(jq -r '.registryUrl' cr_repo.json)" >> "$GITHUB_OUTPUT"
+          echo "repo=$(jq -r '.name' cr_repo.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Docker login to AgentBase CR
+        run: bash .claude/skills/agentbase/scripts/cr.sh credentials docker-login
+
+      - name: Tag & push image
+        id: image
+        run: |
+          IMAGE="${{ steps.cr.outputs.registry }}/${{ steps.cr.outputs.repo }}/${RUNTIME_NAME}:${GITHUB_SHA}"
+          docker tag "${RUNTIME_NAME}:${GITHUB_SHA}" "$IMAGE"
+          docker push "$IMAGE"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+
+      - name: Find existing runtime by name
+        id: existing
+        run: |
+          ID=""
+          PAGE=1
+          while :; do
+            RESP=$(bash .claude/skills/agentbase/scripts/runtime.sh list --page "$PAGE" --size 100)
+            ID=$(echo "$RESP" | jq -r --arg NAME "$RUNTIME_NAME" '.listData[]? | select(.name==$NAME) | .id' | head -1)
+            if [ -n "$ID" ]; then break; fi
+            TOTAL_PAGE=$(echo "$RESP" | jq -r '.totalPage // 1')
+            if [ "$PAGE" -ge "$TOTAL_PAGE" ]; then break; fi
+            PAGE=$((PAGE + 1))
+          done
+          echo "id=$ID" >> "$GITHUB_OUTPUT"
+
+      - name: Check POC wallet eligibility
+        id: wallet
+        run: |
+          RESP=$(bash .claude/skills/agentbase/scripts/billing.sh can-use-poc)
+          echo "poc=$(echo "$RESP" | jq -r '.canUseRuntimePoc // false')" >> "$GITHUB_OUTPUT"
+
+      - name: Create runtime (first deploy)
+        if: steps.existing.outputs.id == ''
+        run: |
+          bash .claude/skills/agentbase/scripts/runtime.sh create \
+            --name "$RUNTIME_NAME" \
+            --image "${{ steps.image.outputs.image }}" \
+            --flavor "$FLAVOR" \
+            --from-cr \
+            --poc "${{ steps.wallet.outputs.poc }}" \
+            --min-replicas 1 --max-replicas 1 \
+            --cpu-scale 50 --mem-scale 50
+
+      - name: Update runtime (subsequent deploys)
+        if: steps.existing.outputs.id != ''
+        run: |
+          bash .claude/skills/agentbase/scripts/runtime.sh update "${{ steps.existing.outputs.id }}" \
+            --image "${{ steps.image.outputs.image }}" \
+            --flavor "$FLAVOR" \
+            --from-cr
+
+      - name: Resolve runtime ID
+        id: rt
+        run: |
+          ID="${{ steps.existing.outputs.id }}"
+          if [ -z "$ID" ]; then
+            RESP=$(bash .claude/skills/agentbase/scripts/runtime.sh list --page 1 --size 100)
+            ID=$(echo "$RESP" | jq -r --arg NAME "$RUNTIME_NAME" '.listData[]? | select(.name==$NAME) | .id' | head -1)
+          fi
+          echo "id=$ID" >> "$GITHUB_OUTPUT"
+
+      - name: Get endpoint URL
+        id: endpoint
+        run: |
+          RESP=$(bash .claude/skills/agentbase/scripts/runtime.sh endpoints list "${{ steps.rt.outputs.id }}")
+          URL=$(echo "$RESP" | jq -r '.listData[]? | select(.name=="DEFAULT") | .url' | head -1)
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+
+      - name: Health check
+        run: |
+          URL="${{ steps.endpoint.outputs.url }}"
+          for i in $(seq 1 20); do
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" "$URL/health" || echo "000")
+            echo "attempt $i: HTTP $CODE"
+            if [ "$CODE" = "200" ]; then
+              echo "Runtime is healthy."
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "Runtime did not become healthy in time."
+          exit 1
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Deploy summary"
+            echo "- Runtime: $RUNTIME_NAME"
+            echo "- Image: ${{ steps.image.outputs.image }}"
+            echo "- Endpoint: ${{ steps.endpoint.outputs.url }}"
+          } >> "$GITHUB_STEP_SUMMARY"

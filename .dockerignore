@@ -1,0 +1,11 @@
+.git
+.github
+.claude
+.env
+.env.*
+.greennode.json
+*.credentials.json
+__pycache__
+*.pyc
+node_modules
+.agentbase
