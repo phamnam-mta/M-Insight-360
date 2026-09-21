@@ -10,7 +10,7 @@ DOCUMENT_TYPES = [
 _KEYWORDS: dict[str, list[str]] = {
     "LEGAL_IDENTITY": ["cccd", "cmnd", "can cuoc cong dan", "chung minh nhan dan"],
     "BUSINESS_REGISTRATION": ["dang ky kinh doanh", "dkkd", "giay chung nhan dang ky doanh nghiep"],
-    "TAX_DOCUMENT": ["ma so thue", "to khai thue", "etax", "mst"],
+    "TAX_DOCUMENT": ["to khai thue", "etax", "quyet toan thue"],
     "BANK_STATEMENT": ["sao ke", "statement", "ghi no", "ghi co", "so du"],
     "INCOME_DOCUMENT": ["bang luong", "sao ke luong", "thu nhap"],
     "ECOMMERCE_REVENUE": ["tiktok shop", "shopee", "doanh thu san"],
