@@ -57,6 +57,22 @@ jobs:
             '{username:$username, password:$password, registry:$registry, repository:$repository}' \
             > /tmp/registry-credentials.json
 
+      # Without this, the deployed runtime has no LLM_API_KEY at all (runtime.sh
+      # defaults environmentVariables to {} when --env-file is omitted), so every
+      # OCR call 401s in production. Only write lines whose secret is actually
+      # set, since an empty VALUE= would override app/config.py's sensible
+      # defaults (LLM_BASE_URL, OCR_VISION_MODEL, NARRATIVE_MODEL) with blanks.
+      - name: Write runtime env file
+        run: |
+          : > /tmp/runtime.env
+          [ -n "${{ secrets.LLM_API_KEY }}" ] && echo "LLM_API_KEY=${{ secrets.LLM_API_KEY }}" >> /tmp/runtime.env
+          [ -n "${{ secrets.LLM_BASE_URL }}" ] && echo "LLM_BASE_URL=${{ secrets.LLM_BASE_URL }}" >> /tmp/runtime.env
+          [ -n "${{ secrets.OCR_VISION_MODEL }}" ] && echo "OCR_VISION_MODEL=${{ secrets.OCR_VISION_MODEL }}" >> /tmp/runtime.env
+          [ -n "${{ secrets.NARRATIVE_MODEL }}" ] && echo "NARRATIVE_MODEL=${{ secrets.NARRATIVE_MODEL }}" >> /tmp/runtime.env
+          if [ ! -s /tmp/runtime.env ]; then
+            echo "::warning::LLM_API_KEY secret is not set — OCR/narrative calls will fail in production."
+          fi
+
       - name: Find existing runtime by name
         id: existing
         run: |
@@ -86,6 +102,7 @@ jobs:
             --image "${{ steps.image.outputs.image }}" \
             --flavor "$FLAVOR" \
             --registry-credentials-file /tmp/registry-credentials.json \
+            --env-file /tmp/runtime.env \
             --poc "${{ steps.wallet.outputs.poc }}" \
             --min-replicas 1 --max-replicas 1 \
             --cpu-scale 50 --mem-scale 50
@@ -96,7 +113,8 @@ jobs:
           bash .claude/skills/agentbase/scripts/runtime.sh update "${{ steps.existing.outputs.id }}" \
             --image "${{ steps.image.outputs.image }}" \
             --flavor "$FLAVOR" \
-            --registry-credentials-file /tmp/registry-credentials.json
+            --registry-credentials-file /tmp/registry-credentials.json \
+            --env-file /tmp/runtime.env
 
       - name: Resolve runtime ID
         id: rt
