@@ -10,7 +10,7 @@ from app.storage.db import init_db
 from app.storage.repository import save_assessment
 
 from .cashflow_flags import evaluate_rf02_negative_cfo
-from .document_check import MANDATORY_DOC_TYPES, classify_document_for_eb
+from .document_check import MANDATORY_DOC_TYPES, classify_documents, missing_from_classified
 from .dsp_reconciliation import evaluate_rf04_dsp_mismatch
 from .financial_inputs import extract_financial_inputs
 from .leverage import compute_short_term_debt_ratio, evaluate_rf03_short_term_debt_ratio
@@ -44,9 +44,8 @@ async def assess(
             saved_files.append((path, upload.filename))
 
         documents = extract_documents(saved_files)
-        classified = [classify_document_for_eb(doc) for doc in documents]
-        present_types = {doc_type for doc_type, _ in classified}
-        missing = [t for t in MANDATORY_DOC_TYPES if t not in present_types]
+        classified = classify_documents(documents)
+        missing = missing_from_classified(classified)
 
         financial_inputs = extract_financial_inputs(documents)
 

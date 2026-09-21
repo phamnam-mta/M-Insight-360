@@ -90,3 +90,41 @@ def test_export_endpoint_returns_docx():
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     )
     assert len(resp.content) > 0
+
+
+def test_assess_endpoint_recognises_a_real_bctc_bundle_as_complete(monkeypatch, tmp_path):
+    # Regression: EB's own keyword classifier matched "ma so thue" (present in
+    # the header of every VN business document) as LEGAL_IDENTITY first and
+    # returned, so a real BCTC + loan-request bundle came back with
+    # missing_data ["FINANCIAL_STATEMENT", "LOAN_REQUEST"] and
+    # ADDITIONAL_DOCUMENTS_REQUIRED while EB was holding the BCTC.
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test4.db"))
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    from app.agents.eb import router as eb_router
+
+    monkeypatch.setattr(eb_router, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""})
+
+    files = [
+        ("files", ("dkkd.csv", io.BytesIO(
+            "GIAY CHUNG NHAN DANG KY DOANH NGHIEP\nDang ky kinh doanh - Ma so thue: 0100000001\n".encode()
+        ), "text/csv")),
+        ("files", ("bctc.csv", io.BytesIO(
+            "Ma so thue: 0100000001\nBAO CAO TAI CHINH 2024\nBANG CAN DOI KE TOAN\n"
+            "Von chu so huu: 5.000.000.000\nTai san ngan han: 3.500.000.000\nNo ngan han: 2.000.000.000\n".encode()
+        ), "text/csv")),
+        ("files", ("de_nghi_vay.csv", io.BytesIO(
+            "Ma so thue: 0100000001\nGIAY DE NGHI CAP TIN DUNG\nMuc dich vay: bo sung von luu dong\n".encode()
+        ), "text/csv")),
+    ]
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/eb/assess",
+            data={"customer_name": "CONG TY TNHH TEST", "tax_id": "0100000001"},
+            files=files,
+        )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["missing_data"] == []
+    assert body["recommendation"] != "ADDITIONAL_DOCUMENTS_REQUIRED"
