@@ -1,0 +1,92 @@
+import io
+
+from fastapi.testclient import TestClient
+
+from app.agents.eb import narrative as eb_narrative
+from app.main import app
+
+
+def test_assess_endpoint_computes_rf01_and_rf02(monkeypatch, tmp_path):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    monkeypatch.setattr(eb_narrative, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""})
+
+    client = TestClient(app)
+    bctc_text = (
+        b"Von chu so huu: 500,000,000\n"
+        b"Tai san ngan han: 1,000,000,000\n"
+        b"No ngan han: 1,500,000,000\n"
+        b"Luu chuyen tien thuan tu hoat dong kinh doanh: -200,000,000\n"
+    )
+    files = {"files": ("bctc.csv", io.BytesIO(bctc_text), "text/csv")}
+    resp = client.post(
+        "/api/eb/assess",
+        data={"customer_name": "CONG TY TNHH TEST", "tax_id": "0100000001"},
+        files=files,
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    flag_ids = {f["rule_id"] for f in body["risk_flags"]}
+    assert "RF01" in flag_ids
+    assert "RF02" in flag_ids
+    assert body["export_available"] is True
+
+
+def test_assess_endpoint_missing_documents_reports_not_ready(monkeypatch, tmp_path):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test2.db"))
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    monkeypatch.setattr(eb_narrative, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""})
+
+    client = TestClient(app)
+    files = {"files": ("empty.csv", io.BytesIO(b"khong co gi lien quan"), "text/csv")}
+    resp = client.post(
+        "/api/eb/assess",
+        data={"customer_name": "CONG TY TNHH TEST", "tax_id": "0100000001"},
+        files=files,
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["missing_data"], "expected at least one missing mandatory document type"
+    assert body["credit_readiness"] == "NOT_READY"
+    assert body["recommendation"] == "ADDITIONAL_DOCUMENTS_REQUIRED"
+
+
+def test_assess_endpoint_rf04_never_defaults_to_pass_without_dsp(monkeypatch, tmp_path):
+    # Regression guard for the RF04/DSP trap explicitly called out in spec §6.
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test3.db"))
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    monkeypatch.setattr(eb_narrative, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""})
+
+    client = TestClient(app)
+    bctc_text = b"Von chu so huu: 500,000,000\nDoanh thu thuan: 1,000,000,000\n"
+    files = {"files": ("bctc.csv", io.BytesIO(bctc_text), "text/csv")}
+    resp = client.post(
+        "/api/eb/assess",
+        data={"customer_name": "CONG TY TNHH TEST", "tax_id": "0100000001"},
+        files=files,
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    rf04 = next(f for f in body["risk_flags"] if f["rule_id"] == "RF04")
+    assert rf04["status"] == "CHƯA ĐÁNH GIÁ"
+
+
+def test_export_endpoint_returns_docx():
+    client = TestClient(app)
+    computed = {
+        "customer_profile": {"customer_name": "CONG TY TNHH TEST", "tax_id": "0100000001"},
+        "credit_engine": {}, "risk_flags": [], "missing_data": [], "recommendation": "PROCEED_FOR_HUMAN_REVIEW",
+        "why": [], "credit_memo": "",
+    }
+    resp = client.post("/api/eb/export", json=computed)
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == (
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+    assert len(resp.content) > 0
