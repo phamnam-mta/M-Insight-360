@@ -1,6 +1,22 @@
-import { AssessmentResult, exportMb02 } from "@/lib/api";
+import {
+  ACTIVATED_STATUS,
+  AssessmentResult,
+  INSUFFICIENT_DATA_STATUS,
+  exportMb02,
+} from "@/lib/api";
 
 export default function ResultPanel({ result }: { result: AssessmentResult }) {
+  const flags = result.risk_flags ?? [];
+  // EB emits all five of its red flags on every assessment regardless of
+  // activation, so a clean company would otherwise show five "warnings".
+  // A flag with no status at all is shown (older payloads).
+  const activatedFlags = flags.filter(
+    (f) => f.status === undefined || f.status === ACTIVATED_STATUS
+  );
+  const undeterminedFlags = flags.filter(
+    (f) => f.status === INSUFFICIENT_DATA_STATUS
+  );
+
   return (
     <div className="bg-white rounded-lg shadow p-6 space-y-4 mt-6">
       <h2 className="text-lg font-semibold text-msb-navy">
@@ -18,14 +34,31 @@ export default function ResultPanel({ result }: { result: AssessmentResult }) {
         </div>
       </div>
 
-      {result.risk_flags && result.risk_flags.length > 0 && (
+      {activatedFlags.length > 0 && (
         <div>
           <h3 className="font-medium text-msb-navy mb-1">Cảnh báo rủi ro</h3>
           <ul className="list-disc list-inside text-sm space-y-1">
-            {result.risk_flags.map((f, i) => (
+            {activatedFlags.map((f, i) => (
               <li key={i}>
                 <span className="font-semibold">{f.rule_id}</span> ({f.severity}):{" "}
                 {f.impact}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {undeterminedFlags.length > 0 && (
+        <div>
+          <h3 className="font-medium text-msb-navy mb-1">
+            Chưa đủ dữ liệu để đánh giá
+          </h3>
+          <ul className="list-disc list-inside text-sm space-y-1 text-gray-600">
+            {undeterminedFlags.map((f, i) => (
+              <li key={i}>
+                <span className="font-semibold">{f.rule_id}</span>
+                {f.rule_name ? ` — ${f.rule_name}` : ""}
+                {f.impact ? `: ${f.impact}` : ""}
               </li>
             ))}
           </ul>

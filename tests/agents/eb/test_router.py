@@ -164,3 +164,41 @@ def test_assess_endpoint_does_not_500_on_one_unsupported_file(monkeypatch, tmp_p
     warning_flags = [f for f in body["risk_flags"] if f["rule_id"] == "LOW_OCR_CONFIDENCE"]
     assert warning_flags, "expected a flag naming the skipped file"
     assert "anh_chup.jpg" in " ".join(warning_flags[0]["evidence"])
+
+
+def test_assess_endpoint_risk_flags_include_frontend_contract_fields(monkeypatch, tmp_path):
+    # Mirrors RB's contract test: web/components/ResultPanel.tsx renders
+    # f.rule_id, f.severity, f.impact and f.status for each risk flag, and EB
+    # emitted a bare asdict() with no "impact" key — every EB flag rendered
+    # with an empty description.
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test6.db"))
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    from app.agents.eb import router as eb_router
+
+    monkeypatch.setattr(eb_router, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""})
+
+    files = {"files": ("bctc.csv", io.BytesIO(
+        "Von chu so huu: 500.000.000\nTai san ngan han: 1.000.000.000\nNo ngan han: 1.500.000.000\n".encode()
+    ), "text/csv")}
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/eb/assess",
+            data={"customer_name": "CONG TY TNHH TEST", "tax_id": "0100000001"},
+            files=files,
+        )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["risk_flags"]
+    for flag in body["risk_flags"]:
+        assert "rule_id" in flag
+        assert "severity" in flag
+        assert "status" in flag
+        assert "impact" in flag
+        assert "recommended_action" in flag
+    rf01 = next(f for f in body["risk_flags"] if f["rule_id"] == "RF01")
+    assert rf01["impact"] == rf01["comment"]
+    assert rf01["impact"], "an activated flag must carry a non-empty description"
+    for rule in body["policy_eligibility"]:
+        assert "impact" in rule

@@ -23,6 +23,17 @@ from .repayment_capacity import compute_dscr, compute_icr, evaluate_rf05_weak_re
 
 router = APIRouter(prefix="/api/eb", tags=["eb"])
 
+
+def _serialize_rule_result(result: RuleResult) -> dict:
+    data = asdict(result)
+    # web/components/ResultPanel.tsx renders f.impact for each flag; RuleResult
+    # has no "impact" field, so alias it from the human-readable comment here at
+    # the HTTP boundary (same as RB's router) rather than growing the shared
+    # RuleResult type for one consumer.
+    data["impact"] = result.comment
+    return data
+
+
 DISCLAIMER = (
     "Agent chỉ chuẩn bị hồ sơ và kiến nghị để cán bộ có thẩm quyền xem xét; không tự phê duyệt, "
     "cam kết cấp hạn mức hoặc thay thế kết luận thẩm định của MSB."
@@ -112,8 +123,8 @@ async def assess(
                     "short_term_debt_ratio": short_term_debt_ratio, "dscr": dscr, "icr": icr,
                 }.items()
             },
-            "risk_flags": [asdict(f) for f in risk_flags],
-            "policy_eligibility": [asdict(r) for r in run_policy_check()],
+            "risk_flags": [_serialize_rule_result(f) for f in risk_flags],
+            "policy_eligibility": [_serialize_rule_result(r) for r in run_policy_check()],
             "missing_data": missing,
             "credit_readiness": credit_readiness,
             "recommendation": recommendation,

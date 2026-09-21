@@ -112,3 +112,38 @@ def test_assess_endpoint_does_not_500_on_one_unsupported_file(monkeypatch, tmp_p
     assert body["precheck"]["total_credit"] == 600_000_000
     # and the bad one is reported rather than silently dropped
     assert any("anh_chup.jpg" in w for w in body["extraction_warnings"])
+
+
+def test_assess_endpoint_opportunities_include_frontend_contract_fields(monkeypatch, tmp_path):
+    # Mirrors RB's contract test: the shared ResultPanel renders f.impact, and
+    # Cross-sell emitted a bare asdict() with no "impact" key.
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test4.db"))
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    from app.agents.crosssell import router as crosssell_router
+
+    monkeypatch.setattr(
+        crosssell_router, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""}
+    )
+
+    header = "Ngay,So but toan,Ghi No,Ghi Co,Dien giai,Doi tac,Tai khoan doi tac,Ngan hang doi tac,Loai tien,Nguon\n"
+    rows = "".join(
+        f"0{i}/06/2025,BT{i},0,200000000,Thanh toan hop dong,CONG TY A,,MB,VND,sao_ke\n" for i in range(1, 4)
+    )
+    files = {"files": ("sao_ke.csv", io.BytesIO((header + rows).encode("utf-8")), "text/csv")}
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/crosssell/assess",
+            data={"customer_name": "CONG TY TNHH TEST", "tax_id": "0100000001"},
+            files=files,
+        )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["opportunities"]
+    for opportunity in body["opportunities"]:
+        assert "rule_id" in opportunity
+        assert "status" in opportunity
+        assert "impact" in opportunity
+    rule2 = next(r for r in body["opportunities"] if r["rule_id"] == "RULE2_SCF")
+    assert rule2["impact"] == rule2["comment"]

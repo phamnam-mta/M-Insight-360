@@ -5,6 +5,7 @@ from dataclasses import asdict
 from fastapi import APIRouter, File, Form, UploadFile
 
 from app.config import get_settings
+from app.engine.core.types import RuleResult
 from app.extraction.pipeline import extract_document
 from app.storage.repository import save_assessment
 
@@ -19,6 +20,17 @@ from .rule5_receivables import evaluate_rule5, leak_ratio_msb_share
 from .statement_parser import parse_statement_documents
 
 router = APIRouter(prefix="/api/crosssell", tags=["crosssell"])
+
+
+def _serialize_rule_result(result: RuleResult) -> dict:
+    data = asdict(result)
+    # web/components/ResultPanel.tsx renders f.impact for each flag; RuleResult
+    # has no "impact" field, so alias it from the human-readable comment here at
+    # the HTTP boundary (same as RB's router) rather than growing the shared
+    # RuleResult type for one consumer.
+    data["impact"] = result.comment
+    return data
+
 
 
 @router.post("/assess")
@@ -90,7 +102,7 @@ async def assess(
             "flow_classification": flows,
             "dashboard": dashboard,
             "top_partners": top_partners[:10],
-            "opportunities": [asdict(r) for r in opportunities],
+            "opportunities": [_serialize_rule_result(r) for r in opportunities],
             "confidence_ceiling": max_confidence,
             "extraction_warnings": extraction_warnings,
         }

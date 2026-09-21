@@ -1,14 +1,25 @@
+// A rule/flag as the three agents' routers serialize it. `status` is the
+// Vietnamese activation state: only ACTIVATED_STATUS means the rule actually
+// fired — EB emits all five of its red flags on every assessment, activated
+// or not.
+export const ACTIVATED_STATUS = "KÍCH HOẠT";
+export const INSUFFICIENT_DATA_STATUS = "CHƯA ĐÁNH GIÁ";
+
+export type RiskFlag = {
+  rule_id?: string;
+  rule_name?: string;
+  status?: string;
+  severity?: string;
+  evidence?: string[];
+  impact?: string;
+  recommended_action?: string;
+};
+
 export type AssessmentResult = {
   case_id?: string;
   customer_profile?: Record<string, unknown>;
   credit_engine?: Record<string, unknown>;
-  risk_flags?: Array<{
-    rule_id?: string;
-    severity?: string;
-    evidence?: string[];
-    impact?: string;
-    recommended_action?: string;
-  }>;
+  risk_flags?: RiskFlag[];
   missing_data?: string[];
   credit_readiness?: string;
   recommendation?: string;
