@@ -1,0 +1,22 @@
+from app.extraction.pdf_parser import extract_pdf, render_pdf_pages_to_images
+
+
+def test_extract_pdf_with_text_layer(fixtures_dir):
+    doc = extract_pdf(str(fixtures_dir / "sample_text.pdf"), "sample_text.pdf")
+    assert "MSB CREDITPILOT TEST DOCUMENT" in doc.text
+    assert doc.extraction_method == "text_layer"
+    assert doc.confidence == 1.0
+    assert doc.warnings == []
+
+
+def test_extract_pdf_without_text_layer_flags_no_text_layer(fixtures_dir):
+    doc = extract_pdf(str(fixtures_dir / "sample_scanned.pdf"), "sample_scanned.pdf")
+    assert doc.extraction_method == "no_text_layer"
+    assert doc.confidence == 0.0
+    assert any("raster" in w.lower() or "ocr" in w.lower() for w in doc.warnings)
+
+
+def test_render_pdf_pages_to_images_returns_one_png_per_page(fixtures_dir):
+    images = render_pdf_pages_to_images(str(fixtures_dir / "sample_scanned.pdf"))
+    assert len(images) == 1
+    assert images[0][:8] == b"\x89PNG\r\n\x1a\n"  # PNG file signature
