@@ -16,9 +16,40 @@ _TAX_ID_CONTEXT_PATTERN = re.compile(
 )
 _VALID_TAX_ID_FORMAT = re.compile(r"^\d{10}(\d{3})?$")
 
+# A bundle legitimately contains other companies' tax IDs: RB's own
+# SUPPLIER_INVOICE and PURCHASE_CONTRACT types are *expected* to carry the
+# counterparty's. Only a tax ID introduced by applicant-side wording is
+# comparable to the declared one; one introduced by seller-side wording is a
+# counterparty's and is ignored. A tax ID with no role wording near it is still
+# treated as the applicant's (that is the hackathon's own eTax-lookup example),
+# so this narrows the false positives it can rule out, not all of them.
+_COUNTERPARTY_ROLE_MARKERS = (
+    "don vi ban hang", "don vi ban", "ben ban", "nguoi ban", "don vi cung cap",
+    "nha cung cap", "ben cho thue", "ben cho vay", "don vi thu huong",
+)
+_APPLICANT_ROLE_MARKERS = (
+    "don vi mua hang", "don vi mua", "ben mua", "nguoi mua", "nguoi nop thue",
+    "ben vay", "khach hang", "chu ho so",
+)
+# How far back to look for the role wording that introduces a tax ID.
+_ROLE_CONTEXT_CHARS = 150
+
 
 def _normalize(raw: str) -> str:
     return raw.replace("-", "").replace(" ", "").strip()
+
+
+def _parent_tax_id(normalized: str) -> str:
+    """The 10-digit parent of a 13-digit branch tax ID ("0319998887001")."""
+    return normalized[:10] if len(normalized) == 13 else normalized
+
+
+def _belongs_to_counterparty(haystack: str, match_start: int) -> bool:
+    """True when the nearest preceding role wording is a seller-side one."""
+    window = haystack[max(0, match_start - _ROLE_CONTEXT_CHARS):match_start]
+    last_counterparty = max((window.rfind(m) for m in _COUNTERPARTY_ROLE_MARKERS), default=-1)
+    last_applicant = max((window.rfind(m) for m in _APPLICANT_ROLE_MARKERS), default=-1)
+    return last_counterparty > last_applicant
 
 
 def _strip_accents_lower(text: str) -> str:
@@ -38,7 +69,10 @@ def check_tax_id_consistency(
     found_ids: set[str] = set()
     for doc in documents:
         haystack = _strip_accents_lower(doc.text)
-        found_ids.update(_normalize(m) for m in _TAX_ID_CONTEXT_PATTERN.findall(haystack))
+        for match in _TAX_ID_CONTEXT_PATTERN.finditer(haystack):
+            if _belongs_to_counterparty(haystack, match.start()):
+                continue
+            found_ids.add(_normalize(match.group(1)))
 
     if not found_ids:
         return RuleResult(
@@ -62,7 +96,12 @@ def check_tax_id_consistency(
             evidence=[f"MST khai báo trên form: {declared_tax_id}"],
         )
 
-    mismatches = found_ids - {declared_normalized}
+    # A branch tax ID ("0319998887-001") belongs to the declared entity
+    # ("0319998887") — the same taxpayer, not a mismatch.
+    declared_parent = _parent_tax_id(declared_normalized)
+    mismatches = {
+        found for found in found_ids if _parent_tax_id(found) != declared_parent
+    }
     if mismatches:
         return RuleResult(
             rule_id="TAX_ID_MISMATCH",

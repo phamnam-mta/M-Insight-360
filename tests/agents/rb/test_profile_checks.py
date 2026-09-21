@@ -63,3 +63,39 @@ def test_forbidden_words_never_appear_regardless_of_outcome():
         text = (result.comment or "").upper()
         for word in forbidden:
             assert word not in text
+
+
+def test_branch_suffix_tax_id_matches_its_parent():
+    # "0319998887-001" is a branch of the declared entity 0319998887, not a
+    # different taxpayer — flagging it as a mismatch is a false positive.
+    for found in ("0319998887-001", "0319998887001"):
+        docs = [_doc(f"Ma so thue: {found}")]
+        result = check_tax_id_consistency("0319998887", docs)
+        assert result.status == "KHÔNG KÍCH HOẠT", found
+
+
+def test_counterparty_tax_id_on_an_invoice_is_not_a_mismatch():
+    # A SUPPLIER_INVOICE/PURCHASE_CONTRACT is *expected* to carry the other
+    # company's tax ID; only the applicant's own tax ID is comparable.
+    docs = [
+        _doc(
+            "HOA DON GIA TRI GIA TANG\n"
+            "Don vi ban hang: CONG TY TNHH XYZ\nMa so thue: 0101234567\n"
+            "Don vi mua hang: CONG TY TEST\nMa so thue: 0319998887\n"
+        )
+    ]
+    result = check_tax_id_consistency("0319998887", docs)
+    assert result.status == "KHÔNG KÍCH HOẠT"
+
+
+def test_seller_only_invoice_leaves_the_check_unevaluated():
+    docs = [_doc("HOA DON\nDon vi ban hang: CONG TY TNHH XYZ\nMa so thue: 0101234567\n")]
+    result = check_tax_id_consistency("0319998887", docs)
+    assert result.status == "CHƯA ĐÁNH GIÁ"
+
+
+def test_applicant_context_mismatch_still_activates():
+    docs = [_doc("GIAY DE NGHI VAY VON\nBen vay: CONG TY TEST\nMa so thue: 0319998897\n")]
+    result = check_tax_id_consistency("0319998887", docs)
+    assert result.status == "KÍCH HOẠT"
+    assert result.severity == "HIGH"
