@@ -10,10 +10,11 @@ on:
 env:
   RUNTIME_NAME: m-insight-360
   FLAVOR: runtime-s2-general-2x4
+  CR_REGISTRY: vcr.vngcloud.vn
+  CR_REPOSITORY: 111480-abp114553
 
 permissions:
   contents: read
-  packages: write
 
 jobs:
   build-and-deploy:
@@ -27,30 +28,31 @@ jobs:
       - name: Build Docker image
         run: docker build -t "${RUNTIME_NAME}:${GITHUB_SHA}" .
 
-      # TEMPORARY: GreenNode's managed Container Registry is currently returning
-      # PROVISIONING_FAILED for this account (confirmed via `cr.sh repo get`).
-      # Using GitHub Container Registry as a stand-in so the rest of the deploy
-      # pipeline can be validated. Switch back to `cr.sh` + `--from-cr` once BTC
-      # resolves the CR provisioning issue.
-      - name: Log in to GitHub Container Registry
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+      # `cr.sh` (API-driven CR credentials) returns PROVISIONING_FAILED for this
+      # service account (GREENNODE_CLIENT_ID/SECRET) even though the CR repo
+      # already exists and works fine under the human console login — looks like
+      # this service account is missing the vcrFullAccess policy. Logging in with
+      # the credentials from the Container Registry console page directly instead
+      # of going through cr.sh. Switch back to `cr.sh --from-cr` once the service
+      # account's CR permission is fixed.
+      - name: Log in to GreenNode Container Registry
+        run: echo "${{ secrets.GREENNODE_CR_PASSWORD }}" | docker login "$CR_REGISTRY" -u "${{ secrets.GREENNODE_CR_USERNAME }}" --password-stdin
 
       - name: Tag & push image
         id: image
         run: |
-          IMAGE="ghcr.io/${{ github.repository_owner }}/${RUNTIME_NAME}:${GITHUB_SHA}"
-          IMAGE_LOWER=$(echo "$IMAGE" | tr '[:upper:]' '[:lower:]')
-          docker tag "${RUNTIME_NAME}:${GITHUB_SHA}" "$IMAGE_LOWER"
-          docker push "$IMAGE_LOWER"
-          echo "image=$IMAGE_LOWER" >> "$GITHUB_OUTPUT"
+          IMAGE="${CR_REGISTRY}/${CR_REPOSITORY}/${RUNTIME_NAME}:${GITHUB_SHA}"
+          docker tag "${RUNTIME_NAME}:${GITHUB_SHA}" "$IMAGE"
+          docker push "$IMAGE"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
 
-      - name: Write external registry credentials file
+      - name: Write registry credentials file
         run: |
           jq -n \
-            --arg username "${{ github.actor }}" \
-            --arg password "${{ secrets.GITHUB_TOKEN }}" \
-            --arg registry "ghcr.io" \
-            --arg repository "${{ github.repository_owner }}" \
+            --arg username "${{ secrets.GREENNODE_CR_USERNAME }}" \
+            --arg password "${{ secrets.GREENNODE_CR_PASSWORD }}" \
+            --arg registry "$CR_REGISTRY" \
+            --arg repository "$CR_REPOSITORY" \
             '{username:$username, password:$password, registry:$registry, repository:$repository}' \
             > /tmp/registry-credentials.json
 
@@ -108,15 +110,25 @@ jobs:
       - name: Get endpoint URL
         id: endpoint
         run: |
-          RESP=$(bash .claude/skills/agentbase/scripts/runtime.sh endpoints list "${{ steps.rt.outputs.id }}")
-          URL=$(echo "$RESP" | jq -r '.listData[]? | select(.name=="DEFAULT") | .url' | head -1)
+          URL=""
+          for i in $(seq 1 10); do
+            RESP=$(bash .claude/skills/agentbase/scripts/runtime.sh endpoints list "${{ steps.rt.outputs.id }}")
+            URL=$(echo "$RESP" | jq -r '.listData[]? | select(.name=="DEFAULT") | .url // empty' | head -1)
+            if [ -n "$URL" ]; then break; fi
+            echo "endpoint url not ready yet, retrying..."
+            sleep 6
+          done
+          if [ -z "$URL" ]; then
+            echo "::error::Could not resolve the DEFAULT endpoint URL after retries."
+            exit 1
+          fi
           echo "url=$URL" >> "$GITHUB_OUTPUT"
 
       - name: Health check
         run: |
           URL="${{ steps.endpoint.outputs.url }}"
           for i in $(seq 1 20); do
-            CODE=$(curl -s -o /dev/null -w "%{http_code}" "$URL/health" || echo "000")
+            CODE=$(curl -s -m 10 -o /dev/null -w "%{http_code}" "$URL/health" || echo "000")
             echo "attempt $i: HTTP $CODE"
             if [ "$CODE" = "200" ]; then
               echo "Runtime is healthy."
