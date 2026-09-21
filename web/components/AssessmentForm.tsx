@@ -67,7 +67,7 @@ export default function AssessmentForm({ agentType, onResult }: Props) {
         <input
           type="file"
           multiple
-          accept=".docx,.pdf,.xlsx,.xls,.csv"
+          accept=".docx,.pdf,.xlsx,.csv"
           onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
           required
         />
