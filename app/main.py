@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import get_settings
@@ -19,6 +20,27 @@ def health() -> dict:
     return {"status": "ok"}
 
 
+# NOTE for RB/EB/Cross-sell: call app.include_router(...) for your agent's
+# router (POST endpoints) any time before this module finishes importing —
+# the frontend fallback below is a GET-only route, so it never shadows a
+# POST/PUT/DELETE endpoint regardless of registration order. It would only
+# shadow a future GET endpoint registered *after* this block, so keep any
+# new GET routes above it.
 _WEB_DIST = Path(__file__).resolve().parent.parent / "web" / "out"
+
 if _WEB_DIST.exists():
-    app.mount("/", StaticFiles(directory=str(_WEB_DIST), html=True), name="web")
+    _next_assets = _WEB_DIST / "_next"
+    if _next_assets.exists():
+        app.mount("/_next", StaticFiles(directory=str(_next_assets)), name="web-next-assets")
+
+    @app.get("/{full_path:path}")
+    def serve_frontend(full_path: str) -> FileResponse:
+        base = _WEB_DIST.resolve()
+        candidate = (base / full_path).resolve()
+        try:
+            candidate.relative_to(base)
+        except ValueError:
+            candidate = base / "index.html"
+        if not candidate.is_file():
+            candidate = base / "index.html"
+        return FileResponse(candidate)
