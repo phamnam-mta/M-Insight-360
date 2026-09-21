@@ -1,4 +1,6 @@
-from app.extraction.pdf_parser import extract_pdf, render_pdf_pages_to_images
+import pytest
+
+from app.extraction.pdf_parser import extract_pdf, get_pdf_page_texts, render_pdf_pages_to_images
 
 
 def test_extract_pdf_with_text_layer(fixtures_dir):
@@ -20,3 +22,17 @@ def test_render_pdf_pages_to_images_returns_one_png_per_page(fixtures_dir):
     images = render_pdf_pages_to_images(str(fixtures_dir / "sample_scanned.pdf"))
     assert len(images) == 1
     assert images[0][:8] == b"\x89PNG\r\n\x1a\n"  # PNG file signature
+
+
+def test_get_pdf_page_texts_returns_one_entry_per_page(fixtures_dir):
+    texts = get_pdf_page_texts(str(fixtures_dir / "sample_mixed.pdf"))
+    assert len(texts) == 2
+    assert "Trang mot co chu that" in texts[0]
+    assert texts[1].strip() == ""
+
+
+def test_extract_pdf_raises_value_error_on_corrupt_file(tmp_path):
+    bogus = tmp_path / "corrupt.pdf"
+    bogus.write_bytes(b"not a real pdf at all")
+    with pytest.raises(ValueError, match="PDF"):
+        extract_pdf(str(bogus), "corrupt.pdf")

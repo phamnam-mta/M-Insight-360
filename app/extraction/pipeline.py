@@ -2,11 +2,15 @@ import os
 
 from .docx_parser import extract_docx
 from .ocr_vision import ocr_image
-from .pdf_parser import extract_pdf, render_pdf_pages_to_images
+from .pdf_parser import MIN_CHARS_FOR_TEXT_LAYER, get_pdf_page_texts, render_pdf_pages_to_images
 from .types import ExtractedDocument
 from .xlsx_csv_parser import extract_csv, extract_xlsx
 
-SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".xlsx", ".xls", ".csv"}
+# .xls (legacy BIFF8) is intentionally excluded: openpyxl cannot read it and
+# raises a non-ValueError exception, so a supported-but-broken format would
+# either silently fail or 500 past the pipeline boundary. Revisit if xlrd is
+# added.
+SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".xlsx", ".csv"}
 
 
 def extract_document(file_path: str, filename: str) -> ExtractedDocument:
@@ -15,34 +19,70 @@ def extract_document(file_path: str, filename: str) -> ExtractedDocument:
         raise ValueError(f"Định dạng file không được hỗ trợ: {ext}")
 
     if ext == ".pdf":
-        doc = extract_pdf(file_path, filename)
-        if doc.extraction_method == "no_text_layer":
-            return _ocr_pdf(file_path, filename, doc)
-        return doc
+        return _extract_pdf_document(file_path, filename)
     if ext == ".docx":
         return extract_docx(file_path, filename)
-    if ext in (".xlsx", ".xls"):
+    if ext == ".xlsx":
         return extract_xlsx(file_path, filename)
     return extract_csv(file_path, filename)  # ext == ".csv"
 
 
-def _ocr_pdf(file_path: str, filename: str, base_doc: ExtractedDocument) -> ExtractedDocument:
-    images = render_pdf_pages_to_images(file_path)
-    texts: list[str] = []
-    warnings = list(base_doc.warnings)
-    for i, image_bytes in enumerate(images):
+def _extract_pdf_document(file_path: str, filename: str) -> ExtractedDocument:
+    page_texts = get_pdf_page_texts(file_path)
+    n_pages = len(page_texts)
+    ocr_needed_idx = [i for i, t in enumerate(page_texts) if len(t.strip()) < MIN_CHARS_FOR_TEXT_LAYER]
+
+    if not ocr_needed_idx:
+        text = "\n".join(f"[Trang {i + 1}]\n{t}" for i, t in enumerate(page_texts))
+        return ExtractedDocument(
+            filename=filename,
+            doc_type="pdf",
+            text=text,
+            tables=[],
+            extraction_method="text_layer",
+            confidence=1.0,
+            warnings=[],
+        )
+
+    warnings: list[str] = []
+    try:
+        images = render_pdf_pages_to_images(file_path)
+    except ValueError as exc:
+        images = []
+        warnings.append(str(exc))
+
+    final_texts = list(page_texts)
+    ocr_success_idx: list[int] = []
+    for i in ocr_needed_idx:
+        if i >= len(images):
+            continue
         try:
-            texts.append(ocr_image(image_bytes))
-        except Exception as exc:  # noqa: BLE001 - deliberately broad: one page must not sink the batch
+            final_texts[i] = ocr_image(images[i])
+            ocr_success_idx.append(i)
+        except Exception as exc:  # noqa: BLE001 - one page's OCR failure must not sink the batch
             warnings.append(f"OCR trang {i + 1} thất bại: {exc}")
+
+    text = "\n".join(f"[Trang {i + 1}]\n{t}" for i, t in enumerate(final_texts))
+    all_pages_needed_ocr = len(ocr_needed_idx) == n_pages
+    ocr_success_count = len(ocr_success_idx)
+
+    if ocr_success_count == 0:
+        method = "ocr_failed" if all_pages_needed_ocr else "mixed"
+        confidence = 0.0
+    elif all_pages_needed_ocr and ocr_success_count == n_pages:
+        method = "vision_llm"
+        confidence = 0.7
+    else:
+        method = "mixed"
+        confidence = round(0.7 * ocr_success_count / len(ocr_needed_idx), 2)
 
     return ExtractedDocument(
         filename=filename,
         doc_type="pdf",
-        text="\n".join(texts),
+        text=text,
         tables=[],
-        extraction_method="vision_llm" if texts else "ocr_failed",
-        confidence=0.7 if texts else 0.0,
+        extraction_method=method,
+        confidence=confidence,
         warnings=warnings,
     )
 

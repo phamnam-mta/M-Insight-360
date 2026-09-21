@@ -33,6 +33,21 @@ def test_ocr_image_returns_model_text(monkeypatch):
     assert result == "Doanh thu: 500 trieu"
 
 
+def test_ocr_image_coerces_null_content_to_empty_string(monkeypatch):
+    monkeypatch.setenv("LLM_API_KEY", "test-key")
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"choices": [{"message": {"content": None}}]})
+
+    monkeypatch.setattr(ocr_vision, "_client", httpx.Client(transport=httpx.MockTransport(handler)))
+
+    result = ocr_vision.ocr_image(b"fakebytes")
+    assert result == ""
+
+
 def test_ocr_image_raises_on_http_error(monkeypatch):
     monkeypatch.setenv("LLM_API_KEY", "test-key")
     from app.config import get_settings

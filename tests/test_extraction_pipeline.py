@@ -63,3 +63,39 @@ def test_extract_documents_processes_a_batch(fixtures_dir):
     ]
     docs = pipeline.extract_documents(files)
     assert [d.doc_type for d in docs] == ["docx", "csv"]
+
+
+def test_extract_document_mixed_pdf_keeps_digital_page_and_ocrs_scanned_page(fixtures_dir, monkeypatch):
+    calls = []
+
+    def fake_ocr_image(image_bytes, model=None):
+        calls.append(image_bytes)
+        return "Noi dung trang scan da OCR"
+
+    monkeypatch.setattr(pipeline, "ocr_image", fake_ocr_image)
+
+    doc = pipeline.extract_document(str(fixtures_dir / "sample_mixed.pdf"), "sample_mixed.pdf")
+    assert "Trang mot co chu that" in doc.text
+    assert "Noi dung trang scan da OCR" in doc.text
+    assert doc.extraction_method == "mixed"
+    assert len(calls) == 1
+    assert doc.warnings == []
+
+
+def test_extract_document_two_page_scan_partial_ocr_failure_keeps_other_page(fixtures_dir, monkeypatch):
+    call_count = {"n": 0}
+
+    def flaky_ocr_image(image_bytes, model=None):
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            return "Trang 1 scan OCR thanh cong"
+        raise RuntimeError("network down")
+
+    monkeypatch.setattr(pipeline, "ocr_image", flaky_ocr_image)
+
+    doc = pipeline.extract_document(str(fixtures_dir / "sample_scanned_2page.pdf"), "sample_scanned_2page.pdf")
+    assert "Trang 1 scan OCR thanh cong" in doc.text
+    assert any("network down" in w for w in doc.warnings)
+    assert doc.extraction_method == "mixed"
+    assert call_count["n"] == 2
+    assert 0.0 < doc.confidence < 0.7  # proportional to the 1-of-2 pages that actually succeeded

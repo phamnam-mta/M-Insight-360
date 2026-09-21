@@ -41,4 +41,4 @@ def ocr_image(image_bytes: bytes, model: str | None = None) -> str:
         },
     )
     response.raise_for_status()
-    return response.json()["choices"][0]["message"]["content"]
+    return response.json()["choices"][0]["message"]["content"] or ""
