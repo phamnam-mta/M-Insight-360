@@ -57,3 +57,22 @@ def test_rf05_activates_when_one_metric_missing_and_other_weak():
     result = evaluate_rf05_weak_repayment_capacity(dscr, icr)
     assert result.status == "KÍCH HOẠT"
     assert result.severity == "CRITICAL"
+
+
+def test_rf05_missing_dscr_with_healthy_icr_is_not_a_clean_pass():
+    # Spec §6: a missing DSCR must never read as a pass. RF05 only reported
+    # CHƯA ĐÁNH GIÁ when *both* metrics were missing, so a bundle with no debt
+    # schedule but a healthy ICR came back "KHÔNG KÍCH HOẠT" — indistinguishable
+    # from a company that was actually assessed and found sound.
+    dscr = compute_dscr(EbFinancialInputs())
+    icr = compute_icr(EbFinancialInputs(ebit_vnd=800_000_000, interest_expense_vnd=200_000_000))
+    result = evaluate_rf05_weak_repayment_capacity(dscr, icr)
+    assert result.status == "CHƯA ĐÁNH GIÁ"
+    assert result.observed_value == "KHÔNG ĐỦ DỮ LIỆU"
+
+
+def test_rf05_missing_icr_with_healthy_dscr_is_not_a_clean_pass():
+    dscr = compute_dscr(EbFinancialInputs(cfads_vnd=1_500_000_000, principal_due_vnd=1_000_000_000, interest_due_vnd=0))
+    icr = compute_icr(EbFinancialInputs())
+    result = evaluate_rf05_weak_repayment_capacity(dscr, icr)
+    assert result.status == "CHƯA ĐÁNH GIÁ"
