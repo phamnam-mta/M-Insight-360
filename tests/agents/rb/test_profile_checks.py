@@ -40,6 +40,16 @@ def test_malformed_declared_tax_id_does_not_crash():
     assert result.status in ("KHÔNG KÍCH HOẠT", "KÍCH HOẠT", "CHƯA ĐÁNH GIÁ")
 
 
+def test_unrelated_ten_digit_number_without_tax_context_is_not_flagged():
+    # A Vietnamese phone number is also exactly 10 digits. Without "MST"/"mã số
+    # thuế"/"eTax" context nearby, it must never be mistaken for a tax ID and
+    # trigger a false HIGH-severity TAX_ID_MISMATCH (which forces manual review
+    # on every case that happens to mention a phone/account/invoice number).
+    docs = [_doc("Sao ke tai khoan. So dien thoai lien he: 0912345678")]
+    result = check_tax_id_consistency("0319998887", docs)
+    assert result.status == "CHƯA ĐÁNH GIÁ"
+
+
 def test_forbidden_words_never_appear_regardless_of_outcome():
     forbidden = ["FAKE", "GIAN LẬN", "GIAN LAN"]
     cases = [

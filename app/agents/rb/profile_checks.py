@@ -4,13 +4,29 @@ from app.engine.core.types import RuleResult
 from app.extraction.types import ExtractedDocument
 
 # VN tax IDs are 10 digits, optionally with a 3-digit branch suffix
-# ("0319998887" or "0319998887-001" / "0319998887001").
-TAX_ID_PATTERN = re.compile(r"\b\d{10}(?:-?\d{3})?\b")
+# ("0319998887" or "0319998887-001" / "0319998887001"). A bare \d{10} pattern
+# would also match a VN phone number (also exactly 10 digits), an account
+# number, an invoice number, etc. anywhere in a document, producing a false
+# HIGH-severity TAX_ID_MISMATCH on any case that merely mentions one of those.
+# So candidate numbers are only accepted near explicit tax-ID keyword context
+# ("mã số thuế", "MST", "eTax", "số thuế").
+_TAX_ID_CONTEXT_PATTERN = re.compile(
+    r"(?:ma so thue|mst|etax|so thue)[^\d]{0,40}(\d{10}(?:-?\d{3})?)",
+    re.IGNORECASE,
+)
 _VALID_TAX_ID_FORMAT = re.compile(r"^\d{10}(\d{3})?$")
 
 
 def _normalize(raw: str) -> str:
     return raw.replace("-", "").replace(" ", "").strip()
+
+
+def _strip_accents_lower(text: str) -> str:
+    import unicodedata
+
+    normalized = unicodedata.normalize("NFKD", text)
+    ascii_text = "".join(c for c in normalized if not unicodedata.combining(c))
+    return ascii_text.lower()
 
 
 def check_tax_id_consistency(
@@ -21,7 +37,8 @@ def check_tax_id_consistency(
 
     found_ids: set[str] = set()
     for doc in documents:
-        found_ids.update(_normalize(m) for m in TAX_ID_PATTERN.findall(doc.text))
+        haystack = _strip_accents_lower(doc.text)
+        found_ids.update(_normalize(m) for m in _TAX_ID_CONTEXT_PATTERN.findall(haystack))
 
     if not found_ids:
         return RuleResult(
