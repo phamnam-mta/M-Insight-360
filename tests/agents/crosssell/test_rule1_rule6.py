@@ -14,6 +14,11 @@ def test_rule1_activates_on_payroll_keyword():
     result = evaluate_rule1_payroll(txns)
     assert result.status == "KÍCH HOẠT"
     assert "20" in " ".join(result.evidence) or "20000000" in " ".join(result.evidence).replace(",", "")
+    # RuleResult's spec-mandated fields (observed_value/policy_version/recommended_action)
+    # must actually be populated, not left at their defaults.
+    assert result.observed_value == 20_000_000.0
+    assert result.policy_version == "DEMO_UAT"
+    assert result.recommended_action
 
 
 def test_rule1_not_evaluated_without_debit_data():
@@ -26,6 +31,12 @@ def test_rule6_activates_on_loan_repayment_keywords():
     result = evaluate_rule6_loan_elsewhere(txns)
     assert result.status == "KÍCH HOẠT"
     assert "CIC" in result.comment.upper()
+    assert result.observed_value == 5_000_000.0
+    assert result.policy_version == "DEMO_UAT"
+    # Spec §7 Rule 6: "Không suy ra dư nợ hiện tại (cần RM lấy CIC)" — this must be a
+    # verification question the RM is prompted to answer, not just buried in the comment.
+    assert result.verification_question and "CIC" in result.verification_question.upper()
+    assert result.recommended_action
 
 
 def test_rule6_not_evaluated_without_matches():

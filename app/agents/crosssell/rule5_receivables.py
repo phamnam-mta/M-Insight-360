@@ -48,19 +48,28 @@ def evaluate_rule5(
         return RuleResult(
             rule_id="RULE5_RECEIVABLES", rule_name="Công nợ 131/331", status="CHƯA ĐÁNH GIÁ",
             comment="Không có bảng công nợ 131/331 — bỏ qua, ghi Notes. KHÔNG kết luận KH không có công nợ.",
+            policy_version="DEMO_UAT",
         )
 
     evidence = []
+    deal_size = None
     if receivables_131_current_vnd is not None:
         deal_size = deal_size_receivables_financing(receivables_131_current_vnd)
         evidence.append(f"Deal size tài trợ phải thu (80% mặc định) = {deal_size:,.0f} VND")
     if payables_331_vnd is not None:
         evidence.append(f"Hạn mức SCF/bảo lãnh tham chiếu dư có 331 = {payables_331_vnd:,.0f} VND")
+
+    verification_question = None
     if leak_ratio is not None and leak_ratio < 0.5:
         evidence.append(f"Tỷ lệ về MSB = {leak_ratio} (< 50%, tín hiệu mạnh). {LEAK_WARNING}")
+        verification_question = LEAK_WARNING
 
     return RuleResult(
         rule_id="RULE5_RECEIVABLES", rule_name="Công nợ 131/331", status="KÍCH HOẠT",
         evidence=evidence,
         comment="Xem 5A-5D trong spec để biết công thức chi tiết từng đề xuất.",
+        observed_value=deal_size if deal_size is not None else payables_331_vnd,
+        policy_version="DEMO_UAT",
+        verification_question=verification_question,
+        recommended_action="RM xác minh số liệu 131/331 rồi tiếp cận tài trợ phải thu / hạn mức SCF, bảo lãnh phù hợp.",
     )

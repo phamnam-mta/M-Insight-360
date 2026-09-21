@@ -1,4 +1,5 @@
 from app.agents.crosssell.rule5_receivables import (
+    LEAK_WARNING,
     compute_dso_dpo,
     deal_size_receivables_financing,
     evaluate_rule5,
@@ -39,3 +40,26 @@ def test_evaluate_rule5_activates_with_receivables_data():
     result = evaluate_rule5(receivables_131_current_vnd=1_000_000_000, payables_331_vnd=None)
     assert result.status == "KÍCH HOẠT"
     assert "800" in result.evidence[0].replace(",", "")
+    assert result.observed_value == 800_000_000
+    assert result.policy_version == "DEMO_UAT"
+    assert result.recommended_action
+
+
+def test_evaluate_rule5_leak_warning_always_accompanies_the_5d_output():
+    # Spec §7 Rule 5D + Global Constraint: the LEAK_WARNING guardrail sentence must always
+    # accompany the <50% leak-ratio output — it is not optional boilerplate.
+    result = evaluate_rule5(
+        receivables_131_current_vnd=1_000_000_000, payables_331_vnd=None, leak_ratio=0.4,
+    )
+    assert result.status == "KÍCH HOẠT"
+    joined_evidence = " ".join(result.evidence)
+    assert LEAK_WARNING in joined_evidence
+    assert result.verification_question and LEAK_WARNING in result.verification_question
+
+
+def test_evaluate_rule5_no_leak_warning_when_ratio_not_below_threshold():
+    result = evaluate_rule5(
+        receivables_131_current_vnd=1_000_000_000, payables_331_vnd=None, leak_ratio=0.8,
+    )
+    joined_evidence = " ".join(result.evidence)
+    assert LEAK_WARNING not in joined_evidence

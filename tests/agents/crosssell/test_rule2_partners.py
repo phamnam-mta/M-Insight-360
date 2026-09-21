@@ -43,6 +43,9 @@ def test_rule2_activates_when_a_partner_qualifies():
     txns = [_txn("CONG TY A", credit=200_000_000) for _ in range(3)]
     result = evaluate_rule2_top_partners(txns)
     assert result.status == "KÍCH HOẠT"
+    assert result.observed_value == 600_000_000
+    assert result.policy_version == "DEMO_UAT"
+    assert result.recommended_action
 
 
 def test_rule2_not_activated_with_no_qualifying_partner():

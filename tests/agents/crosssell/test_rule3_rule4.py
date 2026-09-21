@@ -14,6 +14,9 @@ def test_rule3_activates_with_real_balances_above_threshold_for_enough_days():
     balances = {f"day{i}": 6_000_000_000 for i in range(12)}
     result = evaluate_rule3_idle_balance(balances)
     assert result.status == "KÍCH HOẠT"
+    assert result.observed_value == 6_000_000_000
+    assert result.policy_version == "DEMO_UAT"
+    assert result.recommended_action
 
 
 def test_rule3_uses_lowest_balance_in_period_as_deal_size():
@@ -33,6 +36,11 @@ def _fx_txn(currency: str) -> Transaction:
 def test_rule4_activates_on_foreign_currency_transaction():
     result = evaluate_rule4_fx([_fx_txn("USD")])
     assert result.status == "KÍCH HOẠT"
+    assert result.observed_value == 1_000_000
+    assert result.policy_version == "DEMO_UAT"
+    # Spec §7 Rule 4: "phải xác minh cột Loại tiền thực tế, không chỉ bắt từ khoá."
+    assert result.verification_question and "loại tiền" in result.verification_question.lower()
+    assert result.recommended_action
 
 
 def test_rule4_absence_of_signal_is_never_activated():

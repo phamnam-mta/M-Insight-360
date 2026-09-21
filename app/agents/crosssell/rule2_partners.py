@@ -35,7 +35,9 @@ def evaluate_rule2_top_partners(transactions: list[Transaction]) -> RuleResult:
     if not qualifying:
         return RuleResult(
             rule_id="RULE2_SCF", rule_name="Tài trợ chuỗi / Thanh toán (EB)", status="KHÔNG KÍCH HOẠT",
+            policy_version="DEMO_UAT",
         )
+    top = qualifying[0]
     return RuleResult(
         rule_id="RULE2_SCF", rule_name="Tài trợ chuỗi / Thanh toán (EB)", status="KÍCH HOẠT",
         evidence=[
@@ -43,4 +45,7 @@ def evaluate_rule2_top_partners(transactions: list[Transaction]) -> RuleResult:
         ],
         threshold=f"quy tắc demo: ≥{RULE2_MIN_TRANSACTIONS} GD và ≥{RULE2_MIN_VALUE_VND:,.0f} VND",
         comment="Cơ hội SCF hoặc Bảo lãnh thanh toán (L/C) với các đối tác tần suất/giá trị cao.",
+        observed_value=top["total_value"],
+        policy_version="DEMO_UAT",
+        recommended_action=f"Tiếp cận đối tác hàng đầu ({top['partner']}) để chào SCF hoặc bảo lãnh thanh toán (L/C).",
     )
