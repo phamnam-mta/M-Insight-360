@@ -2,8 +2,13 @@ import io
 
 from fastapi.testclient import TestClient
 
-from app.agents.eb import narrative as eb_narrative
+from app.agents.eb import router as eb_router
 from app.main import app
+
+# NOTE: the narrative function must be patched on the *router* module, not on
+# app.agents.eb.narrative — router.py binds its own reference with
+# "from .narrative import generate_narrative" at import time, so patching the
+# source module left the router calling the real LLM over the network.
 
 
 def test_assess_endpoint_computes_rf01_and_rf02(monkeypatch, tmp_path):
@@ -11,7 +16,7 @@ def test_assess_endpoint_computes_rf01_and_rf02(monkeypatch, tmp_path):
     from app.config import get_settings
 
     get_settings.cache_clear()
-    monkeypatch.setattr(eb_narrative, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""})
+    monkeypatch.setattr(eb_router, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""})
 
     client = TestClient(app)
     bctc_text = (
@@ -39,7 +44,7 @@ def test_assess_endpoint_missing_documents_reports_not_ready(monkeypatch, tmp_pa
     from app.config import get_settings
 
     get_settings.cache_clear()
-    monkeypatch.setattr(eb_narrative, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""})
+    monkeypatch.setattr(eb_router, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""})
 
     client = TestClient(app)
     files = {"files": ("empty.csv", io.BytesIO(b"khong co gi lien quan"), "text/csv")}
@@ -61,7 +66,7 @@ def test_assess_endpoint_rf04_never_defaults_to_pass_without_dsp(monkeypatch, tm
     from app.config import get_settings
 
     get_settings.cache_clear()
-    monkeypatch.setattr(eb_narrative, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""})
+    monkeypatch.setattr(eb_router, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""})
 
     client = TestClient(app)
     bctc_text = b"Von chu so huu: 500,000,000\nDoanh thu thuan: 1,000,000,000\n"
@@ -102,8 +107,6 @@ def test_assess_endpoint_recognises_a_real_bctc_bundle_as_complete(monkeypatch, 
     from app.config import get_settings
 
     get_settings.cache_clear()
-    from app.agents.eb import router as eb_router
-
     monkeypatch.setattr(eb_router, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""})
 
     files = [
@@ -138,8 +141,6 @@ def test_assess_endpoint_does_not_500_on_one_unsupported_file(monkeypatch, tmp_p
     from app.config import get_settings
 
     get_settings.cache_clear()
-    from app.agents.eb import router as eb_router
-
     monkeypatch.setattr(eb_router, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""})
 
     files = [
@@ -175,8 +176,6 @@ def test_assess_endpoint_risk_flags_include_frontend_contract_fields(monkeypatch
     from app.config import get_settings
 
     get_settings.cache_clear()
-    from app.agents.eb import router as eb_router
-
     monkeypatch.setattr(eb_router, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""})
 
     files = {"files": ("bctc.csv", io.BytesIO(

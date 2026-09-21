@@ -2,8 +2,14 @@ import io
 
 from fastapi.testclient import TestClient
 
-from app.agents.rb import narrative as rb_narrative
+from app.agents.rb import router as rb_router
 from app.main import app
+
+# NOTE: the narrative function must be patched on the *router* module, not on
+# app.agents.rb.narrative: router.py does "from .narrative import
+# generate_narrative" at import time, which binds its own reference — patching
+# the source module leaves the router calling the real function, and every test
+# below then made a real outbound HTTPS call to the LLM endpoint.
 
 
 # NOTE: TestClient must be used as a context manager ("with TestClient(app) as
@@ -20,7 +26,7 @@ def test_assess_endpoint_rejects_missing_mandatory_docs(monkeypatch, tmp_path):
     get_settings.cache_clear()
 
     monkeypatch.setattr(
-        rb_narrative, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""}
+        rb_router, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""}
     )
 
     with TestClient(app) as client:
@@ -44,7 +50,7 @@ def test_assess_endpoint_flags_tax_id_mismatch(monkeypatch, tmp_path):
     get_settings.cache_clear()
 
     monkeypatch.setattr(
-        rb_narrative, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""}
+        rb_router, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""}
     )
 
     with TestClient(app) as client:
@@ -74,7 +80,7 @@ def test_assess_endpoint_does_not_500_on_unparseable_file(monkeypatch, tmp_path)
     get_settings.cache_clear()
 
     monkeypatch.setattr(
-        rb_narrative, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""}
+        rb_router, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""}
     )
 
     with TestClient(app) as client:
@@ -98,7 +104,7 @@ def test_assess_endpoint_risk_flags_include_frontend_contract_fields(monkeypatch
     get_settings.cache_clear()
 
     monkeypatch.setattr(
-        rb_narrative, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""}
+        rb_router, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""}
     )
 
     with TestClient(app) as client:
@@ -125,7 +131,7 @@ def test_assess_endpoint_persists_assessment(monkeypatch, tmp_path):
     get_settings.cache_clear()
 
     monkeypatch.setattr(
-        rb_narrative, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""}
+        rb_router, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""}
     )
 
     from app.storage.repository import get_latest_assessment

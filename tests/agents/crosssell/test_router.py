@@ -2,9 +2,14 @@ import io
 
 from fastapi.testclient import TestClient
 
-from app.agents.crosssell import narrative as crosssell_narrative
+from app.agents.crosssell import router as crosssell_router
 from app.agents.crosssell.rule5_receivables import LEAK_WARNING
 from app.main import app
+
+# NOTE: the narrative function must be patched on the *router* module, not on
+# app.agents.crosssell.narrative — router.py binds its own reference with
+# "from .narrative import generate_narrative" at import time, so patching the
+# source module left the router calling the real LLM over the network.
 
 
 def test_assess_endpoint_runs_precheck_and_rules(monkeypatch, tmp_path):
@@ -12,7 +17,7 @@ def test_assess_endpoint_runs_precheck_and_rules(monkeypatch, tmp_path):
     from app.config import get_settings
 
     get_settings.cache_clear()
-    monkeypatch.setattr(crosssell_narrative, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""})
+    monkeypatch.setattr(crosssell_router, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""})
 
     header = "Ngay,So but toan,Ghi No,Ghi Co,Dien giai,Doi tac,Tai khoan doi tac,Ngan hang doi tac,Loai tien,Nguon\n"
     rows = "".join(
@@ -49,7 +54,7 @@ def test_assess_endpoint_wires_rule5d_leak_ratio_end_to_end(monkeypatch, tmp_pat
     from app.config import get_settings
 
     get_settings.cache_clear()
-    monkeypatch.setattr(crosssell_narrative, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""})
+    monkeypatch.setattr(crosssell_router, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""})
 
     header = "Ngay,So but toan,Ghi No,Ghi Co,Dien giai,Doi tac,Tai khoan doi tac,Ngan hang doi tac,Loai tien,Nguon\n"
     rows = "".join(
@@ -85,8 +90,6 @@ def test_assess_endpoint_does_not_500_on_one_unsupported_file(monkeypatch, tmp_p
     from app.config import get_settings
 
     get_settings.cache_clear()
-    from app.agents.crosssell import router as crosssell_router
-
     monkeypatch.setattr(
         crosssell_router, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""}
     )
@@ -121,8 +124,6 @@ def test_assess_endpoint_opportunities_include_frontend_contract_fields(monkeypa
     from app.config import get_settings
 
     get_settings.cache_clear()
-    from app.agents.crosssell import router as crosssell_router
-
     monkeypatch.setattr(
         crosssell_router, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""}
     )
