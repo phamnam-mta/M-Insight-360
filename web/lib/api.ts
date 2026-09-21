@@ -17,6 +17,16 @@ export type AssessmentResult = {
   export_available?: boolean;
 };
 
+export async function exportMb02(result: AssessmentResult): Promise<Blob> {
+  const resp = await fetch("/api/eb/export", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(result),
+  });
+  if (!resp.ok) throw new Error(`Xuất tờ trình thất bại: HTTP ${resp.status}`);
+  return resp.blob();
+}
+
 export async function runAssessment(
   agentType: "rb" | "eb",
   customerName: string,

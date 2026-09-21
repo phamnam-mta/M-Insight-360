@@ -1,4 +1,4 @@
-import { AssessmentResult } from "@/lib/api";
+import { AssessmentResult, exportMb02 } from "@/lib/api";
 
 export default function ResultPanel({ result }: { result: AssessmentResult }) {
   return (
@@ -55,7 +55,22 @@ export default function ResultPanel({ result }: { result: AssessmentResult }) {
       )}
 
       {result.export_available && (
-        <button className="border border-msb-navy text-msb-navy font-semibold px-4 py-2 rounded">
+        <button
+          onClick={async () => {
+            try {
+              const blob = await exportMb02(result);
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = "to-trinh-mb02-du-thao.docx";
+              a.click();
+              URL.revokeObjectURL(url);
+            } catch (err) {
+              alert(err instanceof Error ? err.message : "Xuất tờ trình thất bại.");
+            }
+          }}
+          className="border border-msb-navy text-msb-navy font-semibold px-4 py-2 rounded"
+        >
           Xuất tờ trình MB02
         </button>
       )}

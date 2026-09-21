@@ -21,8 +21,10 @@ def health() -> dict:
 
 
 from .agents.rb.router import router as rb_router  # noqa: E402
+from .agents.eb.router import router as eb_router  # noqa: E402
 
 app.include_router(rb_router)
+app.include_router(eb_router)
 
 
 # NOTE for RB/EB/Cross-sell: call app.include_router(...) for your agent's
