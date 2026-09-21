@@ -1,6 +1,7 @@
 import unicodedata
 from dataclasses import dataclass
 
+from app.engine.core.numbers import parse_vn_number
 from app.extraction.types import ExtractedDocument, ExtractedTable
 
 
@@ -56,49 +57,6 @@ def _map_header(header_row: list[str]) -> dict[str, int] | None:
     return mapping
 
 
-def _to_float(raw: str) -> float:
-    if not raw:
-        return 0.0
-    cleaned = raw.strip()
-    if not cleaned:
-        return 0.0
-
-    has_comma = "," in cleaned
-    has_dot = "." in cleaned
-
-    if has_comma and has_dot:
-        if cleaned.rfind(",") > cleaned.rfind("."):
-            # e.g. "1.234.567,89" — VN/EU style: "." thousands, "," decimal.
-            cleaned = cleaned.replace(".", "").replace(",", ".")
-        else:
-            # e.g. "1,234,567.89" — US style: "," thousands, "." decimal.
-            cleaned = cleaned.replace(",", "")
-    elif has_comma:
-        # Only commas: ambiguous between US thousands ("1,234,567") and a VN
-        # decimal comma ("1234,56"). A single comma followed by 1-2 digits
-        # reads as a decimal; anything else is treated as thousands grouping.
-        parts = cleaned.split(",")
-        if len(parts) == 2 and 1 <= len(parts[1]) <= 2:
-            cleaned = cleaned.replace(",", ".")
-        else:
-            cleaned = cleaned.replace(",", "")
-    elif has_dot:
-        # Only dots: ambiguous between VN thousands grouping ("500.000.000")
-        # and a plain decimal point ("500000.5"). Bank-statement VND amounts
-        # are whole numbers, so more than one dot, or a single dot followed
-        # by exactly 3 digits, is treated as VN thousands grouping rather
-        # than a fractional amount — this is the spec's own documented
-        # domain (whole-VND statements), not a generic-number heuristic.
-        parts = cleaned.split(".")
-        if len(parts) > 2 or (len(parts) == 2 and len(parts[1]) == 3):
-            cleaned = cleaned.replace(".", "")
-
-    try:
-        return float(cleaned)
-    except ValueError:
-        return 0.0
-
-
 def _parse_table(table: ExtractedTable) -> list[Transaction]:
     if not table.rows:
         return []
@@ -120,8 +78,8 @@ def _parse_table(table: ExtractedTable) -> list[Transaction]:
             Transaction(
                 date=cell(row, "date"),
                 entry_no=cell(row, "entry_no"),
-                debit=_to_float(cell(row, "debit")),
-                credit=_to_float(cell(row, "credit")),
+                debit=parse_vn_number(cell(row, "debit")),
+                credit=parse_vn_number(cell(row, "credit")),
                 description=cell(row, "description"),
                 partner=cell(row, "partner"),
                 partner_account=cell(row, "partner_account"),

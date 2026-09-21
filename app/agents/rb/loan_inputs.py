@@ -1,6 +1,7 @@
 import re
 from dataclasses import dataclass
 
+from app.engine.core.numbers import parse_vn_number
 from app.extraction.types import ExtractedDocument
 
 
@@ -17,12 +18,14 @@ class RbLoanInputs:
 
 
 def _to_number(raw: str) -> float:
-    """Parse a US-style formatted number: ',' as thousands separator,
-    '.' (if present, with no comma before it) as the decimal point.
-    e.g. "450,000,000" -> 450000000.0 ; "22.5" -> 22.5
+    """Parse an amount out of a Vietnamese document.
+
+    Delegates to the shared VN-locale parser so "450.000.000" (VN thousands
+    separator) and "450,000,000" (US) both read as 450000000 — the previous
+    ``raw.replace(",", "")`` + ``float(...)`` raised ValueError on the former,
+    which surfaced as an HTTP 500 on ordinary Vietnamese loan requests.
     """
-    cleaned = raw.strip().replace(",", "")
-    return float(cleaned)
+    return parse_vn_number(raw)
 
 
 _LOAN_AMOUNT_RE = re.compile(
