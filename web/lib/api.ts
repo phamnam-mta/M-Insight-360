@@ -26,6 +26,37 @@ export type AssessmentResult = {
   why?: string[];
   credit_memo?: string;
   export_available?: boolean;
+  // Cross-sell-only fields (POST /api/crosssell/assess returns a different
+  // shape than RB/EB — no credit_readiness/recommendation/risk_flags).
+  precheck?: {
+    verdict?: string;
+    reason?: string;
+    total_credit?: number;
+    total_debit?: number;
+  };
+  name_quality?: Record<string, unknown>;
+  flow_classification?: {
+    operating_in?: number;
+    operating_in_pct?: number;
+    cash?: number;
+    interbank?: number;
+  };
+  dashboard?: Array<{
+    month: string;
+    transaction_count: number;
+    total_in: number;
+    total_out: number;
+    net: number;
+  }>;
+  top_partners?: Array<{
+    partner: string;
+    transaction_count: number;
+    total_value: number;
+    qualifies: boolean;
+  }>;
+  opportunities?: RiskFlag[];
+  confidence_ceiling?: string;
+  extraction_warnings?: string[];
 };
 
 export async function exportMb02(result: AssessmentResult): Promise<Blob> {
@@ -39,7 +70,7 @@ export async function exportMb02(result: AssessmentResult): Promise<Blob> {
 }
 
 export async function runAssessment(
-  agentType: "rb" | "eb",
+  agentType: "rb" | "eb" | "crosssell",
   customerName: string,
   taxId: string,
   files: File[]

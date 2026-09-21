@@ -3,10 +3,17 @@
 import { useState } from "react";
 import AssessmentForm from "@/components/AssessmentForm";
 import ResultPanel from "@/components/ResultPanel";
+import CrossSellPanel from "@/components/CrossSellPanel";
 import { AssessmentResult } from "@/lib/api";
 
+const TAB_LABELS: Record<"rb" | "eb" | "crosssell", string> = {
+  rb: "RB",
+  eb: "EB",
+  crosssell: "Cross-sell",
+};
+
 export default function Home() {
-  const [tab, setTab] = useState<"rb" | "eb">("rb");
+  const [tab, setTab] = useState<"rb" | "eb" | "crosssell">("rb");
   const [result, setResult] = useState<AssessmentResult | null>(null);
 
   return (
@@ -18,7 +25,7 @@ export default function Home() {
 
       <div className="max-w-3xl mx-auto px-4 py-8">
         <div className="flex gap-2 mb-6">
-          {(["rb", "eb"] as const).map((t) => (
+          {(["rb", "eb", "crosssell"] as const).map((t) => (
             <button
               key={t}
               onClick={() => {
@@ -29,13 +36,13 @@ export default function Home() {
                 tab === t ? "bg-msb-navy text-white" : "bg-white text-msb-navy"
               }`}
             >
-              {t.toUpperCase()}
+              {TAB_LABELS[t]}
             </button>
           ))}
         </div>
 
         <AssessmentForm agentType={tab} onResult={setResult} />
-        {result && <ResultPanel result={result} />}
+        {result && (tab === "crosssell" ? <CrossSellPanel result={result} /> : <ResultPanel result={result} />)}
       </div>
     </main>
   );

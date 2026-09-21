@@ -4,7 +4,7 @@ import { useState } from "react";
 import { AssessmentResult, runAssessment } from "@/lib/api";
 
 type Props = {
-  agentType: "rb" | "eb";
+  agentType: "rb" | "eb" | "crosssell";
   onResult: (result: AssessmentResult) => void;
 };
 
