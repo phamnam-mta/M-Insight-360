@@ -64,7 +64,15 @@ async def assess(
         loan_inputs = extract_loan_inputs(documents)
         engine_metrics = run_credit_engine(loan_inputs, loan_inputs.existing_monthly_obligation_vnd)
 
-        risk_flags = compute_risk_flags(mandatory_check, tax_id_result, engine_metrics["dti"])
+        risk_flags = compute_risk_flags(
+            mandatory_check,
+            tax_id_result,
+            engine_metrics["dti"],
+            classified_documents=[
+                (doc.filename, doc_type, confidence)
+                for doc, (doc_type, confidence) in zip(documents, classified)
+            ],
+        )
         if extraction_warnings:
             risk_flags.append(
                 RuleResult(

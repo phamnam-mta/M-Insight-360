@@ -50,3 +50,31 @@ def test_flags_never_contain_forbidden_words():
         assert "FAKE" not in blob
         assert "GIAN LẬN" not in blob
         assert "GIAN LAN" not in blob
+
+
+def test_unclassified_document_forces_manual_review():
+    # RB plan Global Constraint / spec §5: a document whose classification
+    # confidence is below threshold becomes UNCLASSIFIED and flags the case for
+    # MANUAL_REVIEW_REQUIRED — "never silently dropped". Nothing looked at
+    # classification confidence at all before.
+    mandatory = {"required": [], "present": [], "missing": []}
+    tax_id_result = RuleResult(rule_id="TAX_ID_MISMATCH", rule_name="x", status="KHÔNG KÍCH HOẠT")
+    dti = Metric(metric="dti", value=0.2, formula="", input_values={}, input_sources={})
+    flags = compute_risk_flags(
+        mandatory, tax_id_result, dti,
+        classified_documents=[("la_gi_do.pdf", "UNCLASSIFIED", 0.0), ("cccd.pdf", "LEGAL_IDENTITY", 1.0)],
+    )
+    flag = next(f for f in flags if f.rule_id == "UNCLASSIFIED_DOCUMENT")
+    assert flag.severity == "HIGH"  # -> determine_readiness returns MANUAL_REVIEW_REQUIRED
+    assert any("la_gi_do.pdf" in e for e in flag.evidence)
+    assert not any("cccd.pdf" in e for e in flag.evidence)
+
+
+def test_no_unclassified_document_flag_when_all_documents_are_classified():
+    mandatory = {"required": [], "present": [], "missing": []}
+    tax_id_result = RuleResult(rule_id="TAX_ID_MISMATCH", rule_name="x", status="KHÔNG KÍCH HOẠT")
+    dti = Metric(metric="dti", value=0.2, formula="", input_values={}, input_sources={})
+    flags = compute_risk_flags(
+        mandatory, tax_id_result, dti, classified_documents=[("cccd.pdf", "LEGAL_IDENTITY", 1.0)]
+    )
+    assert not any(f.rule_id == "UNCLASSIFIED_DOCUMENT" for f in flags)

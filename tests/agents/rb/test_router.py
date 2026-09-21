@@ -149,3 +149,36 @@ def test_assess_endpoint_persists_assessment(monkeypatch, tmp_path):
     assert saved is not None
     assert saved["customer_name"] == "CONG TY TEST"
     assert saved["tax_id"] == "0319998887"
+
+
+def test_assess_endpoint_flags_unclassified_document_for_manual_review(monkeypatch, tmp_path):
+    # A complete mandatory bundle plus one document RB cannot classify must not
+    # come back READY with that document silently dropped (RB plan Global
+    # Constraint, spec §5).
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+
+    monkeypatch.setattr(
+        rb_router, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""}
+    )
+
+    with TestClient(app) as client:
+        files = [
+            ("files", ("cccd.csv", io.BytesIO(b"CAN CUOC CONG DAN\nCCCD\n"), "text/csv")),
+            ("files", ("statement.csv", io.BytesIO(b"sao ke\nghi no\nghi co\n"), "text/csv")),
+            ("files", ("loan.csv", io.BytesIO(b"de nghi vay\nmuc dich vay\n"), "text/csv")),
+            ("files", ("khong_ro.csv", io.BytesIO(b"noi dung khong xac dinh duoc\n"), "text/csv")),
+        ]
+        resp = client.post(
+            "/api/rb/assess",
+            data={"customer_name": "CONG TY TEST", "tax_id": "0319998887"},
+            files=files,
+        )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["missing_data"] == [], "mandatory bundle should be complete"
+    flag = next(f for f in body["risk_flags"] if f["rule_id"] == "UNCLASSIFIED_DOCUMENT")
+    assert any("khong_ro.csv" in e for e in flag["evidence"])
+    assert body["credit_readiness"] == "MANUAL_REVIEW_REQUIRED"
