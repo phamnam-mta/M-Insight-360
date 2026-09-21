@@ -21,6 +21,11 @@ def _classify_one(txn: Transaction) -> str:
     return "direct"
 
 
+def is_cash_transaction(txn: Transaction) -> bool:
+    """True for cash deposits/withdrawals, shared with Rule 2's exclusions."""
+    return _classify_one(txn) == "cash"
+
+
 def classify_flows(transactions: list[Transaction]) -> dict:
     direct_inflow = cash_inflow = interbank_inflow = 0.0
     total_in = 0.0

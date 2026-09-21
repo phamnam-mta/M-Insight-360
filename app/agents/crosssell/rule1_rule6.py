@@ -16,6 +16,14 @@ def _strip_accents_lower(text: str) -> str:
     return ascii_text.lower()
 
 
+def is_loan_transaction(txn: Transaction) -> bool:
+    """Rule 6's loan/repayment keyword test, shared with Rule 2's exclusions."""
+    description = _strip_accents_lower(txn.description)
+    return any(kw in description for kw in _LOAN_KEYWORDS) or bool(
+        _LOAN_CODE_RE.search(txn.description)
+    )
+
+
 def evaluate_rule1_payroll(transactions: list[Transaction]) -> RuleResult:
     matches = [
         t for t in transactions
@@ -39,11 +47,7 @@ def evaluate_rule1_payroll(transactions: list[Transaction]) -> RuleResult:
 
 
 def evaluate_rule6_loan_elsewhere(transactions: list[Transaction]) -> RuleResult:
-    matches = [
-        t for t in transactions
-        if any(kw in _strip_accents_lower(t.description) for kw in _LOAN_KEYWORDS)
-        or _LOAN_CODE_RE.search(t.description)
-    ]
+    matches = [t for t in transactions if is_loan_transaction(t)]
     if not matches:
         return RuleResult(
             rule_id="RULE6_LOAN_ELSEWHERE", rule_name="Tín hiệu vay vốn ở ngân hàng khác", status="CHƯA ĐÁNH GIÁ",

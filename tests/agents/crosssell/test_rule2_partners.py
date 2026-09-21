@@ -52,3 +52,39 @@ def test_rule2_not_activated_with_no_qualifying_partner():
     txns = [_txn("CONG TY A", credit=1_000_000)]
     result = evaluate_rule2_top_partners(txns)
     assert result.status == "KHÔNG KÍCH HOẠT"
+
+
+def _txn_desc(partner, description, credit=0.0, debit=0.0) -> Transaction:
+    return Transaction(
+        date="01/01/2026", entry_no="1", debit=debit, credit=credit, description=description,
+        partner=partner, partner_account="", partner_bank="MB", currency="VND", source="",
+    )
+
+
+def test_loan_repayment_transactions_are_excluded_from_partner_ranking():
+    # Spec §7 Rule 6: "Loại các GD vay/trả nợ khỏi danh sách đối tác tiềm năng".
+    # Without this the customer's own lender ranked as a top partner and Rule 2
+    # recommended pitching SCF financing to the bank lending them money.
+    lender = [
+        _txn_desc("NGAN HANG XYZ", "Thu goc khe uoc LD2401", debit=400_000_000)
+        for _ in range(4)
+    ]
+    supplier = [_txn_desc("CONG TY A", "Thanh toan hop dong", credit=200_000_000) for _ in range(3)]
+    ranked = rank_top_partners(lender + supplier)
+    assert [p["partner"] for p in ranked] == ["CONG TY A"]
+
+    result = evaluate_rule2_top_partners(lender + supplier)
+    assert "NGAN HANG XYZ" not in str(result.evidence) + (result.recommended_action or "")
+
+
+def test_cash_transactions_are_excluded_from_partner_ranking():
+    # Spec §8 dashboard: "top đối tác đã loại GD vay/tiền mặt".
+    cash = [_txn_desc("NOP TIEN MAT", "Nop tien mat vao tai khoan", credit=900_000_000) for _ in range(3)]
+    supplier = [_txn_desc("CONG TY A", "Thanh toan hop dong", credit=200_000_000) for _ in range(3)]
+    ranked = rank_top_partners(cash + supplier)
+    assert [p["partner"] for p in ranked] == ["CONG TY A"]
+
+
+def test_ordinary_transactions_are_still_ranked():
+    txns = [_txn_desc("CONG TY A", "Thanh toan hop dong mua ban", credit=200_000_000) for _ in range(3)]
+    assert rank_top_partners(txns)[0]["qualifies"] is True

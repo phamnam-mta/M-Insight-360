@@ -1,15 +1,28 @@
 from app.engine.core.types import RuleResult
 
+from .flow_classification import is_cash_transaction
+from .rule1_rule6 import is_loan_transaction
 from .statement_parser import Transaction
 
 RULE2_MIN_TRANSACTIONS = 3
 RULE2_MIN_VALUE_VND = 500_000_000
 
 
+def is_excluded_from_partner_ranking(txn: Transaction) -> bool:
+    """Spec §7 Rule 6 / §8: loan and cash transactions are not partner activity.
+
+    Without this the customer's own lender ranked as a "top partner" and Rule 2
+    recommended pitching SCF financing to the bank lending them money.
+    """
+    return is_loan_transaction(txn) or is_cash_transaction(txn)
+
+
 def rank_top_partners(transactions: list[Transaction]) -> list[dict]:
     by_partner: dict[str, dict] = {}
     for txn in transactions:
         if not txn.partner.strip():
+            continue
+        if is_excluded_from_partner_ranking(txn):
             continue
         entry = by_partner.setdefault(
             txn.partner, {"partner": txn.partner, "transaction_count": 0, "total_value": 0.0}
