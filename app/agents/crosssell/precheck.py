@@ -2,12 +2,18 @@ from .statement_parser import Transaction
 
 BLOCK_TOLERANCE_VND = 1  # rounding-only tolerance
 
+# The imbalance direction decides which rows the customer is actually asked for:
+# a computed closing balance that is too high means outflow (ghi nợ) rows are
+# missing, too low means inflow (ghi có) rows are. The message used to say
+# "chi ra" either way, asking the customer for the wrong half of the statement.
 BLOCK_MESSAGE_TEMPLATE = (
     "MSB đã kiểm toán tính toàn vẹn sao kê trước khi phân tích và phát hiện sao kê khách "
-    "hàng cung cấp chưa đầy đủ: ước tính thiếu khoảng {amount:,.0f} VND các dòng chi ra. "
+    "hàng cung cấp chưa đầy đủ: ước tính thiếu khoảng {amount:,.0f} VND các dòng {direction}. "
     "Anh/chị đề nghị khách hàng bổ sung phần còn thiếu trước khi làm hồ sơ, tránh trường hợp "
     "hoàn thiện tờ trình rồi mới bị trả về do thiếu chứng từ."
 )
+MISSING_DEBIT_DIRECTION = "chi ra (ghi nợ)"
+MISSING_CREDIT_DIRECTION = "thu vào (ghi có)"
 
 
 def run_precheck(
@@ -31,12 +37,15 @@ def run_precheck(
 
     if abs(diff) > BLOCK_TOLERANCE_VND:
         est_missing_debit = diff if diff > 0 else 0
+        est_missing_credit = -diff if diff < 0 else 0
+        direction = MISSING_DEBIT_DIRECTION if diff > 0 else MISSING_CREDIT_DIRECTION
         return {
             "verdict": "BLOCK",
             "total_credit": total_credit,
             "total_debit": total_debit,
             "est_missing_debit": est_missing_debit,
-            "reason": BLOCK_MESSAGE_TEMPLATE.format(amount=abs(diff)),
+            "est_missing_credit": est_missing_credit,
+            "reason": BLOCK_MESSAGE_TEMPLATE.format(amount=abs(diff), direction=direction),
         }
 
     return {

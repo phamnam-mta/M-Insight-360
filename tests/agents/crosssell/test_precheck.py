@@ -41,3 +41,27 @@ def test_name_quality_warn_on_high_empty_ratio():
     result = check_name_quality(txns)
     assert result["verdict"] == "WARN"
     assert result["empty_pct"] == 0.3
+
+
+def test_block_message_says_outflow_rows_when_debits_are_missing():
+    # opening 0 + credit 1000 - debit 400 = 600 computed vs 100 reported:
+    # the statement is missing 500 of *outflow* (ghi nợ) rows.
+    txns = [_txn(credit=1000), _txn(debit=400)]
+    result = run_precheck(txns, opening_balance=0, closing_balance=100)
+    assert result["verdict"] == "BLOCK"
+    assert result["est_missing_debit"] == 500
+    assert "chi ra" in result["reason"]
+    assert "thu vào" not in result["reason"]
+
+
+def test_block_message_says_inflow_rows_when_credits_are_missing():
+    # opening 0 + credit 1000 - debit 400 = 600 computed vs 1100 reported: the
+    # statement is missing 500 of *inflow* (ghi có) rows, but the message always
+    # asked the customer for the missing outflow rows — the wrong document.
+    txns = [_txn(credit=1000), _txn(debit=400)]
+    result = run_precheck(txns, opening_balance=0, closing_balance=1100)
+    assert result["verdict"] == "BLOCK"
+    assert result["est_missing_debit"] == 0
+    assert result["est_missing_credit"] == 500
+    assert "thu vào" in result["reason"]
+    assert "chi ra" not in result["reason"]
