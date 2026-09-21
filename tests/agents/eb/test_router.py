@@ -128,3 +128,39 @@ def test_assess_endpoint_recognises_a_real_bctc_bundle_as_complete(monkeypatch, 
     body = resp.json()
     assert body["missing_data"] == []
     assert body["recommendation"] != "ADDITIONAL_DOCUMENTS_REQUIRED"
+
+
+def test_assess_endpoint_does_not_500_on_one_unsupported_file(monkeypatch, tmp_path):
+    # Mirrors RB: extract_documents() raised ValueError for a single
+    # unsupported/corrupt file and took the whole request down with a 500.
+    # One bad file must degrade into a warning flag, not sink the batch.
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test5.db"))
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    from app.agents.eb import router as eb_router
+
+    monkeypatch.setattr(eb_router, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""})
+
+    files = [
+        ("files", ("anh_chup.jpg", io.BytesIO(b"\xff\xd8\xff not a supported format"), "image/jpeg")),
+        ("files", ("bctc.csv", io.BytesIO(
+            # VN-locale dots, not commas: a .csv's commas are column separators,
+            # so "1,000,000,000" would reach the parser as "1 | 000 | 000 | 000".
+            "Von chu so huu: 500.000.000\nTai san ngan han: 1.000.000.000\nNo ngan han: 1.500.000.000\n".encode()
+        ), "text/csv")),
+    ]
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/eb/assess",
+            data={"customer_name": "CONG TY TNHH TEST", "tax_id": "0100000001"},
+            files=files,
+        )
+    assert resp.status_code == 200
+    body = resp.json()
+    # the good file was still processed
+    assert body["credit_engine"]["nwc"]["value"] == -500_000_000
+    # and the bad one is reported rather than silently dropped
+    warning_flags = [f for f in body["risk_flags"] if f["rule_id"] == "LOW_OCR_CONFIDENCE"]
+    assert warning_flags, "expected a flag naming the skipped file"
+    assert "anh_chup.jpg" in " ".join(warning_flags[0]["evidence"])

@@ -5,7 +5,7 @@ from dataclasses import asdict
 from fastapi import APIRouter, File, Form, UploadFile
 
 from app.config import get_settings
-from app.extraction.pipeline import extract_documents
+from app.extraction.pipeline import extract_document
 from app.storage.repository import save_assessment
 
 from .dashboard import build_monthly_dashboard
@@ -41,7 +41,19 @@ async def assess(
                 out.write(content)
             saved_files.append((path, upload.filename))
 
-        documents = extract_documents(saved_files)
+        # Extract file-by-file, as RB's router does: one corrupt/mislabeled/
+        # unsupported file must not sink the whole assessment (extract_document
+        # raises ValueError for those cases; other parser libraries can raise
+        # their own exception types for a genuinely broken file, so this catches
+        # broadly at this one boundary).
+        documents = []
+        extraction_warnings: list[str] = []
+        for path, name in saved_files:
+            try:
+                documents.append(extract_document(path, name))
+            except Exception as exc:  # noqa: BLE001 - see comment above
+                extraction_warnings.append(f"{name}: không đọc được nội dung file ({exc})")
+
         transactions = parse_statement_documents(documents)
 
         precheck = run_precheck(transactions, opening_balance, closing_balance)
@@ -80,6 +92,7 @@ async def assess(
             "top_partners": top_partners[:10],
             "opportunities": [asdict(r) for r in opportunities],
             "confidence_ceiling": max_confidence,
+            "extraction_warnings": extraction_warnings,
         }
 
         if precheck["verdict"] != "BLOCK":

@@ -5,7 +5,8 @@ from dataclasses import asdict
 from fastapi import APIRouter, File, Form, Response, UploadFile
 
 from app.config import get_settings
-from app.extraction.pipeline import extract_documents
+from app.engine.core.types import RuleResult
+from app.extraction.pipeline import extract_document
 from app.storage.db import init_db
 from app.storage.repository import save_assessment
 
@@ -43,7 +44,19 @@ async def assess(
                 out.write(content)
             saved_files.append((path, upload.filename))
 
-        documents = extract_documents(saved_files)
+        # Extract file-by-file, as RB's router does: one corrupt/mislabeled/
+        # unsupported file must not sink the whole assessment (extract_document
+        # raises ValueError for those cases; other parser libraries can raise
+        # their own exception types for a genuinely broken file, so this catches
+        # broadly at this one boundary).
+        documents = []
+        extraction_warnings: list[str] = []
+        for path, name in saved_files:
+            try:
+                documents.append(extract_document(path, name))
+            except Exception as exc:  # noqa: BLE001 - see comment above
+                extraction_warnings.append(f"{name}: không đọc được nội dung file ({exc})")
+
         classified = classify_documents(documents)
         missing = missing_from_classified(classified)
 
@@ -62,6 +75,21 @@ async def assess(
             evaluate_rf04_dsp_mismatch(financial_inputs),
             evaluate_rf05_weak_repayment_capacity(dscr, icr),
         ]
+        if extraction_warnings:
+            risk_flags.append(
+                RuleResult(
+                    rule_id="LOW_OCR_CONFIDENCE",
+                    rule_name="Một số tệp tải lên không đọc được",
+                    status="KÍCH HOẠT",
+                    severity="LOW",
+                    evidence=extraction_warnings,
+                    comment=(
+                        "Một số tệp tải lên không đọc được nội dung (file hỏng hoặc sai "
+                        "định dạng) và đã bị bỏ qua khi thẩm định."
+                    ),
+                    recommended_action="Yêu cầu khách hàng tải lại các tệp này ở định dạng hợp lệ.",
+                )
+            )
         activated_flags = [f for f in risk_flags if f.status == "KÍCH HOẠT"]
 
         if missing:
