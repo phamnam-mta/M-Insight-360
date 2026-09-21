@@ -20,6 +20,11 @@ def health() -> dict:
     return {"status": "ok"}
 
 
+from .agents.crosssell.router import router as crosssell_router  # noqa: E402
+
+app.include_router(crosssell_router)
+
+
 # NOTE for RB/EB/Cross-sell: call app.include_router(...) for your agent's
 # router (POST endpoints) any time before this module finishes importing —
 # the frontend fallback below is a GET-only route, so it never shadows a
