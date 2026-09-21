@@ -9,7 +9,11 @@ on:
 
 env:
   RUNTIME_NAME: m-insight-360
-  FLAVOR: 1x1-general
+  FLAVOR: runtime-s2-general-2x4
+
+permissions:
+  contents: read
+  packages: write
 
 jobs:
   build-and-deploy:
@@ -23,23 +27,32 @@ jobs:
       - name: Build Docker image
         run: docker build -t "${RUNTIME_NAME}:${GITHUB_SHA}" .
 
-      - name: Get Container Registry repo info
-        id: cr
-        run: |
-          bash .claude/skills/agentbase/scripts/cr.sh repo get > cr_repo.json
-          echo "registry=$(jq -r '.registryUrl' cr_repo.json)" >> "$GITHUB_OUTPUT"
-          echo "repo=$(jq -r '.name' cr_repo.json)" >> "$GITHUB_OUTPUT"
-
-      - name: Docker login to AgentBase CR
-        run: bash .claude/skills/agentbase/scripts/cr.sh credentials docker-login
+      # TEMPORARY: GreenNode's managed Container Registry is currently returning
+      # PROVISIONING_FAILED for this account (confirmed via `cr.sh repo get`).
+      # Using GitHub Container Registry as a stand-in so the rest of the deploy
+      # pipeline can be validated. Switch back to `cr.sh` + `--from-cr` once BTC
+      # resolves the CR provisioning issue.
+      - name: Log in to GitHub Container Registry
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
       - name: Tag & push image
         id: image
         run: |
-          IMAGE="${{ steps.cr.outputs.registry }}/${{ steps.cr.outputs.repo }}/${RUNTIME_NAME}:${GITHUB_SHA}"
-          docker tag "${RUNTIME_NAME}:${GITHUB_SHA}" "$IMAGE"
-          docker push "$IMAGE"
-          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+          IMAGE="ghcr.io/${{ github.repository_owner }}/${RUNTIME_NAME}:${GITHUB_SHA}"
+          IMAGE_LOWER=$(echo "$IMAGE" | tr '[:upper:]' '[:lower:]')
+          docker tag "${RUNTIME_NAME}:${GITHUB_SHA}" "$IMAGE_LOWER"
+          docker push "$IMAGE_LOWER"
+          echo "image=$IMAGE_LOWER" >> "$GITHUB_OUTPUT"
+
+      - name: Write external registry credentials file
+        run: |
+          jq -n \
+            --arg username "${{ github.actor }}" \
+            --arg password "${{ secrets.GITHUB_TOKEN }}" \
+            --arg registry "ghcr.io" \
+            --arg repository "${{ github.repository_owner }}" \
+            '{username:$username, password:$password, registry:$registry, repository:$repository}' \
+            > /tmp/registry-credentials.json
 
       - name: Find existing runtime by name
         id: existing
@@ -69,7 +82,7 @@ jobs:
             --name "$RUNTIME_NAME" \
             --image "${{ steps.image.outputs.image }}" \
             --flavor "$FLAVOR" \
-            --from-cr \
+            --registry-credentials-file /tmp/registry-credentials.json \
             --poc "${{ steps.wallet.outputs.poc }}" \
             --min-replicas 1 --max-replicas 1 \
             --cpu-scale 50 --mem-scale 50
@@ -80,7 +93,7 @@ jobs:
           bash .claude/skills/agentbase/scripts/runtime.sh update "${{ steps.existing.outputs.id }}" \
             --image "${{ steps.image.outputs.image }}" \
             --flavor "$FLAVOR" \
-            --from-cr
+            --registry-credentials-file /tmp/registry-credentials.json
 
       - name: Resolve runtime ID
         id: rt
