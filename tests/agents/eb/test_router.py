@@ -317,6 +317,43 @@ def test_assess_endpoint_opportunities_empty_without_statement(monkeypatch, tmp_
     assert resp.json()["crosssell_opportunities"] == []
 
 
+def test_assess_endpoint_includes_new_metrics_and_flags(monkeypatch, tmp_path):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test_new_metrics.db"))
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    monkeypatch.setattr(eb_router, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""})
+
+    client = TestClient(app)
+    csv_text = (
+        b"Chi tieu,31/12/2025\n"
+        b"Von chu so huu,500000000\n"
+        b"Tai san ngan han,300000000\n"
+        b"No ngan han,100000000\n"
+        b"Tai san dai han,400000000\n"
+        b"No dai han,100000000\n"
+        b"Phai thu khach hang,150000000\n"
+        b"Hang ton kho,100000000\n"
+        b"Loi nhuan truoc thue,200000000\n"
+        b"Loi nhuan sau thue,160000000\n"
+        b"Chi phi lai vay,50000000\n"
+        b"Khau hao,20000000\n"
+    )
+    files = {"files": ("bctc.csv", io.BytesIO(csv_text), "text/csv")}
+    resp = client.post(
+        "/api/eb/assess",
+        data={"customer_name": "CONG TY TNHH TEST", "tax_id": "0100000001"},
+        files=files,
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    for key in ("ebitda", "liquidity_balance", "long_term_capital", "total_borrowings", "receivables_financing_limit_80", "receivables_financing_limit_85"):
+        assert key in body["credit_engine"], f"{key} missing from credit_engine"
+    assert "capital_balance_check" in body
+    rule_ids = {f["rule_id"] for f in body["risk_flags"]}
+    assert {"RF06", "RF07"}.issubset(rule_ids)
+
+
 def test_assess_endpoint_reports_available_and_selected_period(monkeypatch, tmp_path):
     monkeypatch.setenv("DB_PATH", str(tmp_path / "test_period.db"))
     from app.config import get_settings

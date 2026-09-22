@@ -16,20 +16,34 @@ from app.storage.db import get_connection, init_db
 from app.storage.files import get_case_file_path, record_case_file, save_case_file
 from app.storage.repository import save_assessment
 
+from .capital_structure import (
+    compute_capital_balance_check, compute_liquidity_balance,
+    compute_long_term_capital, compute_total_borrowings,
+)
 from .cashflow_flags import evaluate_rf02_negative_cfo
-from .contract_financing import compute_output_contract_financing_ratio
+from .contract_financing import compute_output_contract_financing_ratio, compute_receivables_financing_limit
 from .crosssell_adapter import evaluate_crosssell_opportunities
 from .document_check import MANDATORY_DOC_TYPES, classify_documents, missing_from_classified
 from .document_status import build_document_status_list
 from .dsp_reconciliation import evaluate_rf04_dsp_mismatch
 from .financial_inputs import EbFinancialInputs, extract_period_aware_financial_inputs
-from .leverage import compute_short_term_debt_ratio, evaluate_rf03_short_term_debt_ratio
+from .leverage import (
+    compute_short_term_debt_ratio,
+    evaluate_rf03_short_term_debt_ratio,
+    evaluate_rf06_receivables_inventory_concentration,
+)
 from .liquidity import compute_current_ratio, compute_nwc, evaluate_rf01_capital_imbalance
 from .mb02_export import build_mb02_docx
 from .narrative import generate_narrative
 from .overview import evaluate_overview
 from .policy_check import run_policy_check
-from .repayment_capacity import compute_dscr, compute_icr, evaluate_rf05_weak_repayment_capacity
+from .profitability import compute_ebitda
+from .repayment_capacity import (
+    compute_dscr,
+    compute_icr,
+    evaluate_rf05_weak_repayment_capacity,
+    evaluate_rf07_high_interest_burden,
+)
 from .stress_test import run_stress_test
 
 router = APIRouter(prefix="/api/eb", tags=["eb"])
@@ -118,6 +132,13 @@ async def assess(
         output_contract_ratio = compute_output_contract_financing_ratio(
             proposed_limit_vnd, eligible_contract_value_vnd, qd_eb_039_method,
         )
+        ebitda = compute_ebitda(financial_inputs, field_evidence)
+        liquidity_balance = compute_liquidity_balance(financial_inputs, field_evidence)
+        long_term_capital = compute_long_term_capital(financial_inputs, field_evidence)
+        total_borrowings = compute_total_borrowings(financial_inputs, field_evidence)
+        capital_balance_check = compute_capital_balance_check(financial_inputs, nwc, long_term_capital)
+        receivables_financing_limit_80 = compute_receivables_financing_limit(financial_inputs.receivables_vnd, ltv=0.80)
+        receivables_financing_limit_85 = compute_receivables_financing_limit(financial_inputs.receivables_vnd, ltv=0.85)
 
         risk_flags = [
             evaluate_rf01_capital_imbalance(financial_inputs, nwc, field_evidence),
@@ -125,6 +146,8 @@ async def assess(
             evaluate_rf03_short_term_debt_ratio(short_term_debt_ratio, field_evidence),
             evaluate_rf04_dsp_mismatch(financial_inputs, field_evidence),
             evaluate_rf05_weak_repayment_capacity(dscr, icr, field_evidence),
+            evaluate_rf06_receivables_inventory_concentration(financial_inputs, field_evidence),
+            evaluate_rf07_high_interest_burden(financial_inputs, field_evidence),
         ]
         if extraction_warnings:
             risk_flags.append(
@@ -148,6 +171,10 @@ async def assess(
             "nwc": nwc, "current_ratio": current_ratio,
             "short_term_debt_ratio": short_term_debt_ratio, "dscr": dscr, "icr": icr,
             "output_contract_financing_ratio": output_contract_ratio,
+            "ebitda": ebitda, "liquidity_balance": liquidity_balance,
+            "long_term_capital": long_term_capital, "total_borrowings": total_borrowings,
+            "receivables_financing_limit_80": receivables_financing_limit_80,
+            "receivables_financing_limit_85": receivables_financing_limit_85,
         }
         opportunities = evaluate_crosssell_opportunities(documents)
 
@@ -186,6 +213,7 @@ async def assess(
             "crosssell_opportunities": opportunities,
             "export_available": True,
             "ho_so_period": {"selected": selected_period, "available": available_periods},
+            "capital_balance_check": capital_balance_check,
         }
 
         # GreenNode's gateway has an unconfigurable hard timeout in front of
