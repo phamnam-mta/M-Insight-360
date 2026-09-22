@@ -1,8 +1,11 @@
 import re
 import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Literal
 
 from app.engine.core.numbers import parse_vn_number
+from app.engine.core.types import EvidenceRef
+from app.extraction.evidence_search import find_all_matches
 from app.extraction.types import ExtractedDocument
 
 
@@ -21,6 +24,12 @@ class EbFinancialInputs:
     interest_due_vnd: float | None = None
     ebit_vnd: float | None = None
     interest_expense_vnd: float | None = None
+
+
+@dataclass
+class FieldEvidence:
+    status: Literal["COMPUTED", "PENDING_REVIEW", "MISSING_DATA"]
+    evidence: list[EvidenceRef] = field(default_factory=list)
 
 
 def _strip_accents_lower(text: str) -> str:
@@ -51,11 +60,21 @@ _FIELD_PATTERNS: dict[str, re.Pattern] = {
 }
 
 
-def extract_financial_inputs(documents: list[ExtractedDocument]) -> EbFinancialInputs:
-    combined = _strip_accents_lower("\n".join(doc.text for doc in documents))
+def extract_financial_inputs(
+    documents: list[ExtractedDocument],
+) -> tuple[EbFinancialInputs, dict[str, FieldEvidence]]:
     values: dict[str, float] = {}
-    for field, pattern in _FIELD_PATTERNS.items():
-        match = pattern.search(combined)
-        if match:
-            values[field] = _to_number(match.group(1))
-    return EbFinancialInputs(**values)
+    evidence: dict[str, FieldEvidence] = {}
+    for field_name, pattern in _FIELD_PATTERNS.items():
+        matches = find_all_matches(documents, pattern)
+        if not matches:
+            evidence[field_name] = FieldEvidence(status="MISSING_DATA", evidence=[])
+            continue
+        distinct_values = {round(_to_number(raw), 6) for _, raw in matches}
+        refs = [ref for ref, _ in matches]
+        if len(distinct_values) == 1:
+            values[field_name] = _to_number(matches[0][1])
+            evidence[field_name] = FieldEvidence(status="COMPUTED", evidence=refs)
+        else:
+            evidence[field_name] = FieldEvidence(status="PENDING_REVIEW", evidence=refs)
+    return EbFinancialInputs(**values), evidence
