@@ -21,6 +21,17 @@ CREATE TABLE IF NOT EXISTS case_files (
     uploaded_at TEXT NOT NULL DEFAULT (datetime('now')),
     storage_path TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS eb_stress_scenarios (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    case_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    created_by TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    report_period TEXT,
+    request_json TEXT NOT NULL,
+    response_json TEXT NOT NULL
+);
 """
 
 
