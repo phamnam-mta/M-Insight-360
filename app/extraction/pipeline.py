@@ -19,7 +19,7 @@ SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".xlsx", ".csv"}
 # (an 8-page all-scanned BCTC) exceeded the deploy platform's gateway
 # timeout in production (502), even though every individual OCR call
 # succeeded - this is the fix for that.
-MAX_OCR_CONCURRENCY = 6
+MAX_OCR_CONCURRENCY = 12
 # A hard cap on how many pages get OCR'd per document, so a pathological
 # huge scan can't hang a request indefinitely regardless of concurrency.
 MAX_OCR_PAGES = 30

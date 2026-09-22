@@ -1,10 +1,12 @@
 import os
 import tempfile
+import time
 from dataclasses import asdict
 
 from fastapi import APIRouter, File, Form, UploadFile
 
 from app.config import get_settings
+from app.engine.core.timing import narrative_budget_exceeded
 from app.engine.core.types import RuleResult
 from app.extraction.pipeline import extract_document
 
@@ -36,6 +38,7 @@ async def assess(
     tax_id: str = Form(...),
     files: list[UploadFile] = File(...),
 ) -> dict:
+    request_start = time.monotonic()
     with tempfile.TemporaryDirectory() as tmp_dir:
         saved_files: list[tuple[str, str]] = []
         for upload in files:
@@ -113,7 +116,10 @@ async def assess(
             "export_available": False,
         }
 
-        narrative_result = generate_narrative(computed)
+        if narrative_budget_exceeded(request_start):
+            narrative_result = {"why": [], "credit_memo": ""}
+        else:
+            narrative_result = generate_narrative(computed)
         computed["why"] = narrative_result["why"]
         computed["credit_memo"] = narrative_result["credit_memo"]
 

@@ -167,6 +167,38 @@ def test_assess_endpoint_does_not_500_on_one_unsupported_file(monkeypatch, tmp_p
     assert "anh_chup.jpg" in " ".join(warning_flags[0]["evidence"])
 
 
+def test_assess_endpoint_skips_narrative_when_time_budget_already_exceeded(monkeypatch, tmp_path):
+    # The narrative LLM call is the one non-essential step in the pipeline —
+    # GreenNode's gateway has an unconfigurable ~60s hard timeout in front of
+    # this container, so if OCR already used most of the budget, attempting
+    # the narrative call risks a 502 that throws away already-correct,
+    # already-computed numbers along with it. Must be skipped, not attempted.
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test7.db"))
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    monkeypatch.setattr(eb_router, "narrative_budget_exceeded", lambda start: True)
+
+    def must_not_be_called(computed):
+        raise AssertionError("generate_narrative must not be called once the time budget is exceeded")
+
+    monkeypatch.setattr(eb_router, "generate_narrative", must_not_be_called)
+
+    files = {"files": ("bctc.csv", io.BytesIO(
+        "Von chu so huu: 500.000.000\nTai san ngan han: 1.000.000.000\nNo ngan han: 1.500.000.000\n".encode()
+    ), "text/csv")}
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/eb/assess",
+            data={"customer_name": "CONG TY TNHH TEST", "tax_id": "0100000001"},
+            files=files,
+        )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["credit_engine"]["nwc"]["value"] == -500_000_000
+    assert body["why"] == []
+
+
 def test_assess_endpoint_risk_flags_include_frontend_contract_fields(monkeypatch, tmp_path):
     # Mirrors RB's contract test: web/components/ResultPanel.tsx renders
     # f.rule_id, f.severity, f.impact and f.status for each risk flag, and EB

@@ -1,10 +1,12 @@
 import os
 import tempfile
+import time
 from dataclasses import asdict
 
 from fastapi import APIRouter, File, Form, UploadFile
 
 from app.config import get_settings
+from app.engine.core.timing import narrative_budget_exceeded
 from app.engine.core.types import RuleResult
 from app.extraction.pipeline import extract_document
 from app.storage.repository import save_assessment
@@ -44,6 +46,7 @@ async def assess(
     payables_331_vnd: float | None = Form(default=None),
     total_receivable_credit_131_vnd: float | None = Form(default=None),
 ) -> dict:
+    request_start = time.monotonic()
     with tempfile.TemporaryDirectory() as tmp_dir:
         saved_files: list[tuple[str, str]] = []
         for upload in files:
@@ -107,10 +110,12 @@ async def assess(
             "extraction_warnings": extraction_warnings,
         }
 
-        if precheck["verdict"] != "BLOCK":
-            narrative_result = generate_narrative(computed)
-        else:
+        if precheck["verdict"] == "BLOCK":
             narrative_result = {"why": [], "credit_memo": precheck["reason"]}
+        elif narrative_budget_exceeded(request_start):
+            narrative_result = {"why": [], "credit_memo": ""}
+        else:
+            narrative_result = generate_narrative(computed)
 
         computed["why"] = narrative_result["why"]
         computed["credit_memo"] = narrative_result["credit_memo"]

@@ -148,3 +148,34 @@ def test_assess_endpoint_opportunities_include_frontend_contract_fields(monkeypa
         assert "impact" in opportunity
     rule2 = next(r for r in body["opportunities"] if r["rule_id"] == "RULE2_SCF")
     assert rule2["impact"] == rule2["comment"]
+
+
+def test_assess_endpoint_skips_narrative_when_time_budget_already_exceeded(monkeypatch, tmp_path):
+    # GreenNode's gateway has an unconfigurable ~60s hard timeout in front of
+    # this container; if extraction already used most of the budget, the
+    # narrative call must be skipped rather than risk a 502 that discards
+    # already-computed, already-correct results along with it.
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test_budget.db"))
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    monkeypatch.setattr(crosssell_router, "narrative_budget_exceeded", lambda start: True)
+
+    def must_not_be_called(computed):
+        raise AssertionError("generate_narrative must not be called once the time budget is exceeded")
+
+    monkeypatch.setattr(crosssell_router, "generate_narrative", must_not_be_called)
+
+    header = "Ngay,So but toan,Ghi No,Ghi Co,Dien giai,Doi tac,Tai khoan doi tac,Ngan hang doi tac,Loai tien,Nguon\n"
+    row = "01/06/2025,BT1,0,200000000,Thanh toan hop dong,CONG TY A,,MB,VND,sao_ke\n"
+    files = {"files": ("sao_ke.csv", io.BytesIO((header + row).encode("utf-8")), "text/csv")}
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/crosssell/assess",
+            data={"customer_name": "CONG TY TNHH TEST", "tax_id": "0100000001"},
+            files=files,
+        )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["why"] == []
+    assert body["credit_memo"] == ""

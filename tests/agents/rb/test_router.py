@@ -182,3 +182,32 @@ def test_assess_endpoint_flags_unclassified_document_for_manual_review(monkeypat
     flag = next(f for f in body["risk_flags"] if f["rule_id"] == "UNCLASSIFIED_DOCUMENT")
     assert any("khong_ro.csv" in e for e in flag["evidence"])
     assert body["credit_readiness"] == "MANUAL_REVIEW_REQUIRED"
+
+
+def test_assess_endpoint_skips_narrative_when_time_budget_already_exceeded(monkeypatch, tmp_path):
+    # GreenNode's gateway has an unconfigurable ~60s hard timeout in front of
+    # this container; if OCR already used most of the budget, the narrative
+    # call must be skipped rather than risk a 502 that discards already-
+    # computed, already-correct numbers along with it.
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test_budget.db"))
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    monkeypatch.setattr(rb_router, "narrative_budget_exceeded", lambda start: True)
+
+    def must_not_be_called(computed):
+        raise AssertionError("generate_narrative must not be called once the time budget is exceeded")
+
+    monkeypatch.setattr(rb_router, "generate_narrative", must_not_be_called)
+
+    with TestClient(app) as client:
+        files = {"files": ("note.csv", io.BytesIO(b"col1,col2\nval1,val2\n"), "text/csv")}
+        resp = client.post(
+            "/api/rb/assess",
+            data={"customer_name": "CONG TY TEST", "tax_id": "0319998887"},
+            files=files,
+        )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["why"] == []
+    assert body["credit_memo"] == ""
