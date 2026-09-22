@@ -73,12 +73,18 @@ export async function runAssessment(
   agentType: "rb" | "eb" | "crosssell",
   customerName: string,
   taxId: string,
-  files: File[]
+  files: File[],
+  extraFields?: Record<string, string>
 ): Promise<AssessmentResult> {
   const form = new FormData();
   form.append("customer_name", customerName);
   form.append("tax_id", taxId);
   for (const f of files) form.append("files", f);
+  if (extraFields) {
+    for (const [key, value] of Object.entries(extraFields)) {
+      if (value.trim() !== "") form.append(key, value);
+    }
+  }
 
   const resp = await fetch(`/api/${agentType}/assess`, {
     method: "POST",

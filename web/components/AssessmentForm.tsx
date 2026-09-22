@@ -8,10 +8,19 @@ type Props = {
   onResult: (result: AssessmentResult) => void;
 };
 
+const CROSSSELL_FIELDS: Array<{ key: string; label: string }> = [
+  { key: "opening_balance", label: "Số dư đầu kỳ (VND)" },
+  { key: "closing_balance", label: "Số dư cuối kỳ (VND)" },
+  { key: "receivables_131_current_vnd", label: "Phải thu 131 hiện tại (VND)" },
+  { key: "payables_331_vnd", label: "Phải trả 331 (VND)" },
+  { key: "total_receivable_credit_131_vnd", label: "Tổng phát sinh Có 131 (VND)" },
+];
+
 export default function AssessmentForm({ agentType, onResult }: Props) {
   const [customerName, setCustomerName] = useState("");
   const [taxId, setTaxId] = useState("");
   const [files, setFiles] = useState<File[]>([]);
+  const [crosssellFields, setCrosssellFields] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -23,7 +32,13 @@ export default function AssessmentForm({ agentType, onResult }: Props) {
     setLoading(true);
     setError(null);
     try {
-      const result = await runAssessment(agentType, customerName, taxId, files);
+      const result = await runAssessment(
+        agentType,
+        customerName,
+        taxId,
+        files,
+        agentType === "crosssell" ? crosssellFields : undefined
+      );
       onResult(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Đã xảy ra lỗi không xác định");
@@ -72,6 +87,30 @@ export default function AssessmentForm({ agentType, onResult }: Props) {
           required
         />
       </div>
+
+      {agentType === "crosssell" && (
+        <div className="border-t pt-4 space-y-3">
+          <p className="text-sm text-gray-500">
+            Số liệu bổ sung (tùy chọn) — giúp đối chiếu tính toàn vẹn sao kê và tính
+            chính xác các cơ hội tài trợ phải thu/phải trả. Để trống nếu chưa có.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {CROSSSELL_FIELDS.map((f) => (
+              <div key={f.key}>
+                <label className="block text-xs font-medium text-msb-navy mb-1">{f.label}</label>
+                <input
+                  type="number"
+                  className="w-full border rounded px-3 py-2 text-sm"
+                  value={crosssellFields[f.key] ?? ""}
+                  onChange={(e) =>
+                    setCrosssellFields((prev) => ({ ...prev, [f.key]: e.target.value }))
+                  }
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {error && <p className="text-red-600 text-sm">{error}</p>}
 
