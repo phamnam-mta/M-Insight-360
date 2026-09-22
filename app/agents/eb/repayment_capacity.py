@@ -1,6 +1,7 @@
 from app.engine.core.types import Metric, RuleResult
 
 from .financial_inputs import EbFinancialInputs
+from .profitability import resolve_ebit_vnd
 
 DSCR_THRESHOLD = 1.0
 ICR_THRESHOLD = 1.5
@@ -31,14 +32,15 @@ def compute_dscr(inputs: EbFinancialInputs, field_evidence: dict | None = None) 
 
 
 def compute_icr(inputs: EbFinancialInputs, field_evidence: dict | None = None) -> Metric:
-    if inputs.ebit_vnd is None or not inputs.interest_expense_vnd:
+    ebit = resolve_ebit_vnd(inputs)
+    if ebit is None or not inputs.interest_expense_vnd:
         return Metric.need_more_data("icr", "EBIT / chi_phi_lai_vay")
-    value = round(inputs.ebit_vnd / inputs.interest_expense_vnd, 4)
+    value = round(ebit / inputs.interest_expense_vnd, 4)
     return Metric(
         metric="icr", value=value, formula="EBIT / chi_phi_lai_vay",
-        input_values={"ebit_vnd": inputs.ebit_vnd, "interest_expense_vnd": inputs.interest_expense_vnd},
+        input_values={"ebit_vnd": ebit, "interest_expense_vnd": inputs.interest_expense_vnd},
         input_sources={"ebit_vnd": "bctc", "interest_expense_vnd": "bctc"},
-        evidence=_evidence_for(field_evidence, "ebit_vnd", "interest_expense_vnd"),
+        evidence=_evidence_for(field_evidence, "ebit_vnd", "pbt_vnd", "interest_expense_vnd"),
     )
 
 

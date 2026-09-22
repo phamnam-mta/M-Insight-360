@@ -20,6 +20,12 @@ def test_icr_computed():
     assert metric.value == 4.0
 
 
+def test_icr_uses_ebit_fallback_when_ebit_vnd_not_directly_extracted():
+    inputs = EbFinancialInputs(pbt_vnd=600_000_000, interest_expense_vnd=200_000_000)
+    metric = compute_icr(inputs)
+    assert metric.value == 4.0  # (600M + 200M) / 200M
+
+
 def test_icr_zero_interest_expense_is_need_more_data_not_infinity():
     inputs = EbFinancialInputs(ebit_vnd=800_000_000, interest_expense_vnd=0)
     metric = compute_icr(inputs)
