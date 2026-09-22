@@ -1,6 +1,6 @@
 import re
 
-from app.extraction.evidence_search import find_all_matches
+from app.extraction.evidence_search import find_all_matches, find_all_matches_by_period
 from app.extraction.types import ExtractedDocument, ExtractedTable
 
 PATTERN = re.compile(r"von chu so huu[:\s]*(-?[\d.,]+)")
@@ -124,3 +124,43 @@ def test_free_text_capture_preserves_vietnamese_diacritics():
     doc = _pdf_doc(["Nganh nghe kinh doanh: Bán lẻ hàng tiêu dùng"])
     matches = find_all_matches([doc], industry_pattern)
     assert matches[0][1] == "Bán lẻ hàng tiêu dùng"
+
+
+_TSNH_PATTERN = re.compile(r"tai san ngan han[:\s]*(-?[\d.,]+)")
+
+
+def test_find_all_matches_by_period_splits_current_and_prior_year_columns():
+    table = ExtractedTable(
+        rows=[
+            ["Chi tieu", "31/12/2025", "31/12/2024"],
+            ["Tai san ngan han", "100.000.000", "90.000.000"],
+        ],
+        sheet_or_page="BCDKT",
+    )
+    doc = ExtractedDocument(filename="bctc.xlsx", doc_type="xlsx", text="", tables=[table], extraction_method="spreadsheet", confidence=1.0)
+    results = find_all_matches_by_period([doc], _TSNH_PATTERN)
+    by_year = {year: raw for _, raw, year, _ in results}
+    assert by_year["2025"] == "100.000.000"
+    assert by_year["2024"] == "90.000.000"
+    assert all(conf == "explicit" for *_, conf in results)
+
+
+def test_find_all_matches_by_period_single_column_falls_back_to_primary_year_guessed():
+    table = ExtractedTable(rows=[["Chi tieu", "Gia tri"], ["Tai san ngan han", "50.000.000"]], sheet_or_page="S1")
+    doc = ExtractedDocument(
+        filename="bctc.xlsx", doc_type="xlsx", text="Tai ngay 31/12/2025",
+        tables=[table], extraction_method="spreadsheet", confidence=1.0,
+    )
+    results = find_all_matches_by_period([doc], _TSNH_PATTERN)
+    assert len(results) == 1
+    _, raw, year, confidence = results[0]
+    assert raw == "50.000.000"
+    assert year == "2025"
+    assert confidence == "suy_doan"
+
+
+def test_find_all_matches_by_period_no_primary_year_found_yields_khong_xac_dinh():
+    table = ExtractedTable(rows=[["Chi tieu", "Gia tri"], ["Tai san ngan han", "50.000.000"]], sheet_or_page="S1")
+    doc = ExtractedDocument(filename="bctc.xlsx", doc_type="xlsx", text="", tables=[table], extraction_method="spreadsheet", confidence=1.0)
+    results = find_all_matches_by_period([doc], _TSNH_PATTERN)
+    assert results[0][2] == "khong_xac_dinh"
