@@ -3,6 +3,7 @@ import json
 import httpx
 
 from app.config import get_settings
+from app.engine.core.llm_json import strip_markdown_json_fence
 
 SYSTEM_PROMPT = (
     "Bạn là Trợ lý AI Thẩm định Tín dụng Khối Bán lẻ của MSB CreditPilot. "
@@ -43,7 +44,7 @@ def generate_narrative(computed: dict) -> dict:
         return {"why": [], "credit_memo": _DEGRADED_MEMO}
 
     try:
-        parsed = json.loads(content)
+        parsed = json.loads(strip_markdown_json_fence(content))
         # Layer 3 may only ever supply narrative text — even if the LLM includes
         # other keys in its JSON (e.g. echoing back a "credit_engine" object),
         # only why/credit_memo are ever taken from it.

@@ -3,6 +3,7 @@ import json
 import httpx
 
 from app.config import get_settings
+from app.engine.core.llm_json import strip_markdown_json_fence
 
 SYSTEM_PROMPT = (
     "Bạn là Trợ lý AI Thẩm định Tín dụng Khối Doanh nghiệp SME của MSB. "
@@ -37,7 +38,7 @@ def generate_narrative(computed: dict) -> dict:
         return {"why": [], "credit_memo": ""}
 
     try:
-        parsed = json.loads(content)
+        parsed = json.loads(strip_markdown_json_fence(content))
         return {"why": parsed.get("why", []), "credit_memo": parsed.get("credit_memo", "")}
     except json.JSONDecodeError:
         return {"why": [], "credit_memo": content}

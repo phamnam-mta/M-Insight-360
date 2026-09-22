@@ -98,3 +98,27 @@ def test_generate_narrative_never_overwrites_numeric_fields(monkeypatch):
 
     result = narrative.generate_narrative({"credit_engine": {"dti": {"value": 0.99}}})
     assert set(result.keys()) == {"why", "credit_memo"}
+
+
+def test_generate_narrative_parses_json_wrapped_in_markdown_fence(monkeypatch):
+    # Reproduced live: z-ai/glm-5.2-hackathon sometimes wraps its JSON reply in
+    # a ```json ... ``` code fence despite the system prompt saying "DUY NHẤT
+    # bằng JSON hợp lệ, không kèm giải thích" - json.loads() rejected the
+    # wrapper outright, so why=[] and the raw fenced text leaked into
+    # credit_memo instead of the parsed narrative.
+    monkeypatch.setenv("LLM_API_KEY", "test-key")
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+
+    llm_payload = {"why": ["Hồ sơ đủ điều kiện"], "credit_memo": "Tóm tắt hồ sơ..."}
+    fenced_content = "```json\n" + json.dumps(llm_payload, ensure_ascii=False) + "\n```"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"choices": [{"message": {"content": fenced_content}}]})
+
+    monkeypatch.setattr(narrative, "_client", httpx.Client(transport=httpx.MockTransport(handler)))
+
+    result = narrative.generate_narrative({"credit_readiness": "READY"})
+    assert result["why"] == llm_payload["why"]
+    assert result["credit_memo"] == llm_payload["credit_memo"]
