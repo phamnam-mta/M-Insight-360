@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Image from "next/image";
 import AssessmentForm from "@/components/AssessmentForm";
+import EbResultPanel from "@/components/EbResultPanel";
 import ResultPanel from "@/components/ResultPanel";
 import CrossSellPanel from "@/components/CrossSellPanel";
 import { AssessmentResult } from "@/lib/api";
@@ -44,7 +45,7 @@ export default function Home() {
         </div>
       </header>
 
-      <div className="max-w-3xl mx-auto px-4 py-8">
+      <div className={`mx-auto px-4 py-8 ${tab === "eb" ? "max-w-6xl" : "max-w-3xl"}`}>
         <div className="flex gap-2 mb-6">
           {(["rb", "eb", "crosssell"] as const).map((t) => (
             <button
@@ -65,7 +66,9 @@ export default function Home() {
         </div>
 
         <AssessmentForm agentType={tab} onResult={setResult} />
-        {result && (tab === "crosssell" ? <CrossSellPanel result={result} /> : <ResultPanel result={result} />)}
+        {result && tab === "crosssell" && <CrossSellPanel result={result} />}
+        {result && tab === "eb" && <EbResultPanel result={result} />}
+        {result && tab === "rb" && <ResultPanel result={result} />}
       </div>
 
       <footer className="text-center text-xs text-msb-navy/60 py-6">

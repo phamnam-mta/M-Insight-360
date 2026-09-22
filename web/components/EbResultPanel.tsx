@@ -395,9 +395,11 @@ export default function EbResultPanel({ result }: { result: AssessmentResult }) 
         <div className="bg-white rounded-lg shadow p-6 space-y-3">
           <h2 className="text-lg font-semibold text-msb-navy">B.1 Bốn thẻ chỉ tiêu</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {Object.entries(result.credit_engine).map(([key, metric]) => (
-              <MetricCard key={key} metricKey={key} metric={metric as MetricValue} />
-            ))}
+            {Object.entries(result.credit_engine)
+              .filter(([key]) => key in METRIC_LABELS)
+              .map(([key, metric]) => (
+                <MetricCard key={key} metricKey={key} metric={metric as MetricValue} />
+              ))}
           </div>
         </div>
       )}

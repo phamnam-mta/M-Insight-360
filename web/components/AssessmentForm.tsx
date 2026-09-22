@@ -16,11 +16,17 @@ const CROSSSELL_FIELDS: Array<{ key: string; label: string }> = [
   { key: "total_receivable_credit_131_vnd", label: "Tổng phát sinh Có 131 (VND)" },
 ];
 
+const EB_FIELDS: Array<{ key: string; label: string }> = [
+  { key: "proposed_limit_vnd", label: "Hạn mức đề xuất cho hợp đồng (VND)" },
+  { key: "eligible_contract_value_vnd", label: "Giá trị hợp đồng đủ điều kiện (VND)" },
+];
+
 export default function AssessmentForm({ agentType, onResult }: Props) {
   const [customerName, setCustomerName] = useState("");
   const [taxId, setTaxId] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [crosssellFields, setCrosssellFields] = useState<Record<string, string>>({});
+  const [ebFields, setEbFields] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,7 +43,7 @@ export default function AssessmentForm({ agentType, onResult }: Props) {
         customerName,
         taxId,
         files,
-        agentType === "crosssell" ? crosssellFields : undefined
+        agentType === "crosssell" ? crosssellFields : agentType === "eb" ? ebFields : undefined
       );
       onResult(result);
     } catch (err) {
@@ -104,6 +110,29 @@ export default function AssessmentForm({ agentType, onResult }: Props) {
                   value={crosssellFields[f.key] ?? ""}
                   onChange={(e) =>
                     setCrosssellFields((prev) => ({ ...prev, [f.key]: e.target.value }))
+                  }
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {agentType === "eb" && (
+        <div className="border-t pt-4 space-y-3">
+          <p className="text-sm text-gray-500">
+            Số liệu bổ sung (tùy chọn) — dùng để tính tỷ lệ tài trợ hợp đồng đầu ra. Để trống nếu chưa có.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {EB_FIELDS.map((f) => (
+              <div key={f.key}>
+                <label className="block text-xs font-medium text-msb-navy mb-1">{f.label}</label>
+                <input
+                  type="number"
+                  className="w-full border rounded px-3 py-2 text-sm"
+                  value={ebFields[f.key] ?? ""}
+                  onChange={(e) =>
+                    setEbFields((prev) => ({ ...prev, [f.key]: e.target.value }))
                   }
                 />
               </div>
