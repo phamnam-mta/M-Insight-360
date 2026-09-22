@@ -7,8 +7,11 @@ import {
   ConditionRow,
   DocumentStatus,
   INSUFFICIENT_DATA_STATUS,
+  OpportunityCard,
   RiskFlag,
   evidenceFileUrl,
+  exportMb02,
+  runStressTest,
 } from "@/lib/api";
 
 const RESULT_LABEL: Record<string, string> = {
@@ -233,6 +236,130 @@ function DocumentPanel({ documents }: { documents: DocumentStatus[] }) {
   );
 }
 
+function CrossSellSection({ opportunities }: { opportunities: OpportunityCard[] }) {
+  if (opportunities.length === 0) {
+    return (
+      <div className="bg-white rounded-lg shadow p-6">
+        <h2 className="text-lg font-semibold text-msb-navy mb-2">E. Cơ hội bán chéo</h2>
+        <p className="text-sm text-gray-500">Chưa phát hiện dấu hiệu nhu cầu rõ ràng từ chứng từ hiện có.</p>
+      </div>
+    );
+  }
+  return (
+    <div className="bg-white rounded-lg shadow p-6 space-y-3">
+      <h2 className="text-lg font-semibold text-msb-navy">E. Cơ hội bán chéo</h2>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {opportunities.map((o, i) => (
+          <div key={i} className="border rounded p-3 text-sm space-y-1">
+            <p className="font-semibold text-msb-navy">{o.product_suggestion}</p>
+            <p className="text-gray-600">{o.formula_note}</p>
+            {o.basis_documents.length > 0 && (
+              <ul className="text-xs text-gray-500 list-disc list-inside">
+                {o.basis_documents.map((b, j) => <li key={j}>{b}</li>)}
+              </ul>
+            )}
+            {o.unverified_conditions && (
+              <p className="text-xs text-amber-700">Chưa xác minh: {o.unverified_conditions}</p>
+            )}
+            <p className="text-xs text-gray-500">Mức ưu tiên: {o.priority} · Người rà soát: {o.reviewer}</p>
+            {o.recommended_action && <p className="text-xs font-medium">{o.recommended_action}</p>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AiInsightSection({ why, creditMemo }: { why: string[]; creditMemo?: string }) {
+  const [showDeepAnalysis, setShowDeepAnalysis] = useState(false);
+  return (
+    <div className="bg-white rounded-lg shadow p-6 space-y-3">
+      <h2 className="text-lg font-semibold text-msb-navy">F. AI Insight</h2>
+      {why.length > 0 ? (
+        <ul className="text-sm space-y-2 list-disc list-inside">
+          {why.map((w, i) => <li key={i}>{w}</li>)}
+        </ul>
+      ) : (
+        <p className="text-sm text-gray-500">Chưa có nhận định AI (có thể do vượt ngân sách thời gian xử lý).</p>
+      )}
+      <button className="text-xs text-msb-navy underline" onClick={() => setShowDeepAnalysis((v) => !v)}>
+        {showDeepAnalysis ? "Ẩn phân tích sâu" : "Phân tích sâu"}
+      </button>
+      {showDeepAnalysis && (
+        <p className="text-sm text-gray-600 border-t pt-2">
+          {creditMemo || "Chỉ có 1 kỳ dữ liệu hoặc chưa đủ dữ liệu — chưa đủ để phân tích xu hướng."}
+        </p>
+      )}
+    </div>
+  );
+}
+
+type StressTestState = {
+  revenue_pct: number; margin_pct: number; interest_rate_pct: number; collection_speed_pct: number;
+};
+
+function StressTestPanel({ creditEngine }: { creditEngine?: Record<string, MetricValue> }) {
+  const [deltas, setDeltas] = useState<StressTestState>({
+    revenue_pct: 0, margin_pct: 0, interest_rate_pct: 0, collection_speed_pct: 0,
+  });
+  const [result, setResult] = useState<Awaited<ReturnType<typeof runStressTest>> | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleRun() {
+    setError(null);
+    try {
+      const inputs: Record<string, number | null> = {};
+      for (const key of ["nwc", "dscr", "icr"]) {
+        const m = creditEngine?.[key];
+        if (m?.input_values) {
+          for (const [k, v] of Object.entries(m.input_values)) {
+            if (typeof v === "number") inputs[k] = v;
+          }
+        }
+      }
+      const r = await runStressTest(inputs, deltas);
+      setResult(r);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Stress test thất bại");
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-lg shadow p-6 space-y-3">
+      <h2 className="text-lg font-semibold text-msb-navy">Stress Test (kịch bản giả định)</h2>
+      <p className="text-xs text-gray-500">
+        Đây là kịch bản giả định do cán bộ nhập, không phải dự báo tài chính chắc chắn.
+      </p>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {(Object.keys(deltas) as Array<keyof StressTestState>).map((key) => (
+          <div key={key}>
+            <label className="block text-xs text-gray-500 mb-1">{key} (%)</label>
+            <input
+              type="number" className="w-full border rounded px-2 py-1 text-sm"
+              value={deltas[key]}
+              onChange={(e) => setDeltas((prev) => ({ ...prev, [key]: Number(e.target.value) }))}
+            />
+          </div>
+        ))}
+      </div>
+      <button onClick={handleRun} className="bg-msb-navy text-white text-sm font-semibold px-3 py-1.5 rounded">
+        Chạy kịch bản
+      </button>
+      {error && <p className="text-sm text-red-600">{error}</p>}
+      {result && (
+        <div className="text-sm grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t">
+          {Object.entries(result.after).map(([key, after]) => (
+            <div key={key}>
+              <p className="text-gray-500">{key}</p>
+              <p>Trước: {result.before[key]?.value ?? "—"} → Sau: {after.value ?? "—"}</p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function EbResultPanel({ result }: { result: AssessmentResult }) {
   const overview = result.overview ?? [];
   const summary = result.overview_summary;
@@ -277,6 +404,32 @@ export default function EbResultPanel({ result }: { result: AssessmentResult }) 
 
       <RiskFlagsSection flags={result.risk_flags ?? []} />
       <DocumentPanel documents={result.documents ?? []} />
+      <CrossSellSection opportunities={result.crosssell_opportunities ?? []} />
+      <AiInsightSection why={result.why ?? []} creditMemo={result.credit_memo} />
+      <StressTestPanel creditEngine={result.credit_engine as Record<string, MetricValue> | undefined} />
+
+      {result.export_available && (
+        <div className="bg-white rounded-lg shadow p-6">
+          <button
+            onClick={async () => {
+              try {
+                const blob = await exportMb02(result);
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = "to-trinh-mb02-du-thao.docx";
+                a.click();
+                URL.revokeObjectURL(url);
+              } catch (err) {
+                alert(err instanceof Error ? err.message : "Xuất tờ trình thất bại.");
+              }
+            }}
+            className="border border-msb-navy text-msb-navy font-semibold px-4 py-2 rounded"
+          >
+            Soạn tờ trình MB02a
+          </button>
+        </div>
+      )}
     </div>
   );
 }
