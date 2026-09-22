@@ -38,3 +38,25 @@ def compute_output_contract_financing_ratio(
         },
         policy_version=policy_version,
     )
+
+
+_VALID_LTV = (0.80, 0.85)
+
+
+def compute_receivables_financing_limit(receivables_vnd: float | None, ltv: float) -> Metric:
+    if ltv not in _VALID_LTV:
+        raise ValueError(f"ltv phải là 0.80 hoặc 0.85, nhận {ltv}")
+    if receivables_vnd is None:
+        return Metric.need_more_data("receivables_financing_limit", "phai_thu_khach_hang * ltv")
+    value = round(receivables_vnd * ltv, 2)
+    policy_version = (
+        "Điều kiện ưu tiên — cần xác minh bên mua thuộc VNR500/FDI và phê duyệt theo quy định"
+        if ltv == 0.85 else None
+    )
+    return Metric(
+        metric="receivables_financing_limit", value=value,
+        formula="phai_thu_khach_hang * ltv",
+        input_values={"receivables_vnd": receivables_vnd, "ltv": ltv},
+        input_sources={"receivables_vnd": "bctc"},
+        policy_version=policy_version,
+    )
