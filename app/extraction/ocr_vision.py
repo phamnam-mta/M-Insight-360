@@ -11,8 +11,16 @@ OCR_PROMPT = (
     "Nếu chữ mờ không đọc được, ghi [KHÔNG ĐỌC ĐƯỢC] tại vị trí đó."
 )
 
+# The deploy platform's gateway has its own hard timeout in front of this
+# container (observed empirically at ~58-65s, not configurable). A single
+# slow OCR call holding the connection open past that ceiling causes a 502
+# that discards the whole request - even when pages run concurrently, the
+# request only finishes once the SLOWEST page's call returns. So this
+# client timeout must be short enough that one abnormally slow page fails
+# fast (becomes a per-page warning in pipeline.py) instead of dragging the
+# entire response past the gateway's ceiling.
 # Module-level client so tests can monkeypatch the transport.
-_client = httpx.Client(timeout=300.0)
+_client = httpx.Client(timeout=20.0)
 
 
 def ocr_image(image_bytes: bytes, model: str | None = None) -> str:

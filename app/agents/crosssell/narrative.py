@@ -14,7 +14,10 @@ SYSTEM_PROMPT = (
     "riêng của khách hàng khác)."
 )
 
-_client = httpx.Client(timeout=300.0)
+# Kept short - this call is already gated by narrative_budget_exceeded()
+# before it happens, so this timeout only bounds the call itself against
+# the deploy platform's ~58-65s gateway ceiling (see timing.py).
+_client = httpx.Client(timeout=15.0)
 
 
 def generate_narrative(computed: dict) -> dict:
