@@ -233,3 +233,97 @@ def test_assess_endpoint_risk_flags_include_frontend_contract_fields(monkeypatch
     assert rf01["impact"], "an activated flag must carry a non-empty description"
     for rule in body["policy_eligibility"]:
         assert "impact" in rule
+
+
+def test_assess_endpoint_case_id_is_unique_per_run(monkeypatch, tmp_path):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test8.db"))
+    monkeypatch.setenv("CASE_FILES_DIR", str(tmp_path / "eb_files"))
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    monkeypatch.setattr(eb_router, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""})
+
+    with TestClient(app) as client:
+        files = {"files": ("bctc.csv", io.BytesIO(b"Von chu so huu: 500.000.000\n"), "text/csv")}
+        resp1 = client.post("/api/eb/assess", data={"customer_name": "A", "tax_id": "0100000001"}, files=files)
+        files2 = {"files": ("bctc.csv", io.BytesIO(b"Von chu so huu: 500.000.000\n"), "text/csv")}
+        resp2 = client.post("/api/eb/assess", data={"customer_name": "A", "tax_id": "0100000001"}, files=files2)
+    assert resp1.json()["case_id"] != resp2.json()["case_id"]
+    assert resp1.json()["case_id"].startswith("EB-0100000001-")
+
+
+def test_assess_endpoint_persists_uploaded_file_and_serves_it_back(monkeypatch, tmp_path):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test9.db"))
+    monkeypatch.setenv("CASE_FILES_DIR", str(tmp_path / "eb_files"))
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    monkeypatch.setattr(eb_router, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""})
+
+    content = b"Tai san ngan han: 1.000.000.000\nNo ngan han: 1.500.000.000\n"
+    files = {"files": ("bctc.csv", io.BytesIO(content), "text/csv")}
+    with TestClient(app) as client:
+        resp = client.post("/api/eb/assess", data={"customer_name": "A", "tax_id": "0100000001"}, files=files)
+        body = resp.json()
+        case_id = body["case_id"]
+        nwc_evidence = body["credit_engine"]["nwc"]
+        assert nwc_evidence.get("evidence"), "expected NWC metric to carry evidence citations"
+        file_id = list(nwc_evidence["evidence"].values())[0][0]["file_id"]
+        file_resp = client.get(f"/api/eb/files/{case_id}/{file_id}")
+    assert file_resp.status_code == 200
+    assert file_resp.content == content
+
+
+def test_get_file_endpoint_404s_on_unknown_case(monkeypatch, tmp_path):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test10.db"))
+    monkeypatch.setenv("CASE_FILES_DIR", str(tmp_path / "eb_files"))
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    with TestClient(app) as client:
+        resp = client.get("/api/eb/files/NOPE/NOPE")
+    assert resp.status_code == 404
+
+
+def test_assess_endpoint_includes_overview_and_never_shows_ready_without_full_checklist(monkeypatch, tmp_path):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test11.db"))
+    monkeypatch.setenv("CASE_FILES_DIR", str(tmp_path / "eb_files"))
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    monkeypatch.setattr(eb_router, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""})
+
+    files = {"files": ("bctc.csv", io.BytesIO(b"Von chu so huu: 500.000.000\n"), "text/csv")}
+    with TestClient(app) as client:
+        resp = client.post("/api/eb/assess", data={"customer_name": "A", "tax_id": "0100000001"}, files=files)
+    body = resp.json()
+    assert len(body["overview"]) == 11
+    assert body["overview_summary"]["pending"] > 0
+    assert body["overall_conclusion"] == "Chưa đủ căn cứ xác định điều kiện áp dụng"
+    assert "credit_engine" in body and "output_contract_financing_ratio" in body["credit_engine"]
+
+
+def test_assess_endpoint_opportunities_empty_without_statement(monkeypatch, tmp_path):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test12.db"))
+    monkeypatch.setenv("CASE_FILES_DIR", str(tmp_path / "eb_files"))
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    monkeypatch.setattr(eb_router, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""})
+
+    files = {"files": ("bctc.csv", io.BytesIO(b"Von chu so huu: 500.000.000\n"), "text/csv")}
+    with TestClient(app) as client:
+        resp = client.post("/api/eb/assess", data={"customer_name": "A", "tax_id": "0100000001"}, files=files)
+    assert resp.json()["opportunities"] == []
+
+
+def test_stress_test_endpoint_recomputes_metrics():
+    client = TestClient(app)
+    resp = client.post("/api/eb/stress-test", json={
+        "inputs": {"ebit_vnd": 800_000_000, "interest_expense_vnd": 200_000_000},
+        "deltas": {"margin_pct": -50},
+    })
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["before"]["icr"]["value"] == 4.0
+    assert body["after"]["icr"]["value"] == 2.0
