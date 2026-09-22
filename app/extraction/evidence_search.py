@@ -53,7 +53,17 @@ def find_all_matches(
             for table in doc.tables:
                 for row_idx, row in enumerate(table.rows):
                     joined = " | ".join(row)
-                    haystack = _strip_accents_lower(joined)
+                    # Field patterns are written colon-style ("...[:\s]*(...)")
+                    # to match prose like "Von chu so huu: 9.000.000.000", but
+                    # the far more common spreadsheet layout has the label and
+                    # value in separate cells, joined here with " | " — a bare
+                    # "|" satisfies neither ":" nor "\s", so the standard
+                    # two-column layout would otherwise never match any field
+                    # pattern. Replacing "|" with a space (1-for-1, so match
+                    # spans still index correctly into the original `joined`
+                    # string below) makes the join transparent to those
+                    # patterns without having to rewrite every one of them.
+                    haystack = _strip_accents_lower(joined).replace("|", " ")
                     match = pattern.search(haystack)
                     if match:
                         results.append((
@@ -64,20 +74,30 @@ def find_all_matches(
                             ),
                             _extract_value(joined, match),
                         ))
-            continue
+            # xlsx/csv build doc.text from the exact same rows as doc.tables
+            # (see xlsx_csv_parser.py), so falling through to search doc.text
+            # there would only double-count every match already found above.
+            # docx tables, though, are Word tables extracted separately from
+            # the document's paragraph text (see docx_parser.py) — the two
+            # are disjoint, so a field written as plain narrative text (very
+            # common in real BCTC docx uploads) must still be searched, or it
+            # is silently missed even though the document plainly contains it.
+            if doc.doc_type != "docx":
+                continue
 
-        haystack = _strip_accents_lower(doc.text)
-        match = pattern.search(haystack)
-        if match:
-            line = next(
-                (l for l in doc.text.splitlines() if pattern.search(_strip_accents_lower(l))),
-                doc.text,
-            )
-            results.append((
-                EvidenceRef(
-                    file_id=file_id, filename=doc.filename,
-                    location="Toàn văn bản", original_text=line.strip(),
-                ),
-                _extract_value(doc.text, match),
-            ))
+        if doc.text:
+            haystack = _strip_accents_lower(doc.text)
+            match = pattern.search(haystack)
+            if match:
+                line = next(
+                    (l for l in doc.text.splitlines() if pattern.search(_strip_accents_lower(l))),
+                    doc.text,
+                )
+                results.append((
+                    EvidenceRef(
+                        file_id=file_id, filename=doc.filename,
+                        location="Toàn văn bản", original_text=line.strip(),
+                    ),
+                    _extract_value(doc.text, match),
+                ))
     return results
