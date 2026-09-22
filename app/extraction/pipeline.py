@@ -1,4 +1,5 @@
 import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from .docx_parser import extract_docx
 from .ocr_vision import ocr_image
@@ -11,6 +12,17 @@ from .xlsx_csv_parser import extract_csv, extract_xlsx
 # either silently fail or 500 past the pipeline boundary. Revisit if xlrd is
 # added.
 SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".xlsx", ".csv"}
+
+# OCR calls are I/O-bound network requests, so running them concurrently
+# turns "N pages x up to 60s each" into roughly one call's worth of wall
+# time instead of N. Sequential OCR of a real multi-page scanned document
+# (an 8-page all-scanned BCTC) exceeded the deploy platform's gateway
+# timeout in production (502), even though every individual OCR call
+# succeeded - this is the fix for that.
+MAX_OCR_CONCURRENCY = 6
+# A hard cap on how many pages get OCR'd per document, so a pathological
+# huge scan can't hang a request indefinitely regardless of concurrency.
+MAX_OCR_PAGES = 30
 
 
 def extract_document(file_path: str, filename: str) -> ExtractedDocument:
@@ -45,6 +57,13 @@ def _extract_pdf_document(file_path: str, filename: str) -> ExtractedDocument:
         )
 
     warnings: list[str] = []
+    if len(ocr_needed_idx) > MAX_OCR_PAGES:
+        skipped = len(ocr_needed_idx) - MAX_OCR_PAGES
+        warnings.append(
+            f"Vượt giới hạn OCR tối đa ({MAX_OCR_PAGES} trang) — đã bỏ qua {skipped} trang cuối."
+        )
+        ocr_needed_idx = ocr_needed_idx[:MAX_OCR_PAGES]
+
     try:
         images = render_pdf_pages_to_images(file_path)
     except ValueError as exc:
@@ -53,14 +72,17 @@ def _extract_pdf_document(file_path: str, filename: str) -> ExtractedDocument:
 
     final_texts = list(page_texts)
     ocr_success_idx: list[int] = []
-    for i in ocr_needed_idx:
-        if i >= len(images):
-            continue
-        try:
-            final_texts[i] = ocr_image(images[i])
-            ocr_success_idx.append(i)
-        except Exception as exc:  # noqa: BLE001 - one page's OCR failure must not sink the batch
-            warnings.append(f"OCR trang {i + 1} thất bại: {exc}")
+    pages_to_ocr = [i for i in ocr_needed_idx if i < len(images)]
+    if pages_to_ocr:
+        with ThreadPoolExecutor(max_workers=min(MAX_OCR_CONCURRENCY, len(pages_to_ocr))) as executor:
+            future_to_idx = {executor.submit(ocr_image, images[i]): i for i in pages_to_ocr}
+            for future in as_completed(future_to_idx):
+                i = future_to_idx[future]
+                try:
+                    final_texts[i] = future.result()
+                    ocr_success_idx.append(i)
+                except Exception as exc:  # noqa: BLE001 - one page's OCR failure must not sink the batch
+                    warnings.append(f"OCR trang {i + 1} thất bại: {exc}")
 
     text = "\n".join(f"[Trang {i + 1}]\n{t}" for i, t in enumerate(final_texts))
     all_pages_needed_ocr = len(ocr_needed_idx) == n_pages
