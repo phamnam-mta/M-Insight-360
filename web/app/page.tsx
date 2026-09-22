@@ -23,20 +23,41 @@ export default function Home() {
         className="relative overflow-hidden bg-msb-navy bg-cover bg-center"
         style={{ backgroundImage: "url(/msb-hero-banner.jpg)" }}
       >
-        <div className="absolute inset-0 bg-msb-navy/95" />
-        <div className="relative px-8 py-8 max-w-5xl mx-auto">
+        <div className="absolute inset-0 bg-gradient-to-br from-msb-navy/97 via-msb-navy/95 to-msb-navy/90" />
+        <div className="relative px-8 py-10 md:py-14 max-w-5xl mx-auto">
           <Image
             src="/msb-logo-white.svg"
             alt="MSB"
             width={110}
             height={27}
-            className="mb-4"
+            className="mb-6"
             priority
           />
-          <h1 className="text-3xl font-bold text-white">M-Insight 360</h1>
-          <p className="text-sm text-white/80 mt-1">
-            Trợ lý AI Thẩm định tín dụng &amp; Bán chéo — MSB x GreenNode AI Hackathon
+          <span className="inline-block text-[11px] font-semibold tracking-widest uppercase text-msb-orange bg-white/10 rounded-full px-3 py-1 mb-4">
+            MSB × GreenNode AI Hackathon
+          </span>
+          <h1 className="text-3xl md:text-4xl font-extrabold text-white leading-tight">
+            TRỢ LÝ THẨM ĐỊNH TÍN DỤNG TOÀN DIỆN MSB
+          </h1>
+          <p className="text-lg md:text-xl font-semibold text-msb-orange mt-2">
+            Nhanh hơn. Sâu hơn. Chính xác hơn.
           </p>
+          <p className="text-sm md:text-base text-white/80 mt-4 max-w-3xl leading-relaxed">
+            Đột phá phân luồng kép: Thẩm định Tín dụng KHDN (EB) &amp; KHCN (RB) Hộ kinh doanh.
+            Tự động bóc tách BCTC, tính NWC, DSCR, ICR, Cross-sell và xuất Tờ trình chỉ trong vài giây.
+          </p>
+          <div className="flex flex-wrap gap-2 mt-5">
+            {["Thẩm định KHDN (EB)", "Thẩm định KHCN (RB)", "Cross-sell", "NWC · DSCR · ICR", "Tờ trình tự động"].map(
+              (label) => (
+                <span
+                  key={label}
+                  className="text-xs font-medium text-white/90 bg-white/10 border border-white/20 rounded-full px-3 py-1"
+                >
+                  {label}
+                </span>
+              )
+            )}
+          </div>
         </div>
       </header>
 
