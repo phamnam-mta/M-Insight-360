@@ -10,7 +10,6 @@ import {
   FileSpreadsheet,
   FileText,
   FolderOpen,
-  SlidersHorizontal,
   TrendingUp,
 } from "lucide-react";
 import {
@@ -19,15 +18,19 @@ import {
   DocumentStatus,
   evidenceFileUrl,
   exportMb02,
-  runStressTest,
 } from "@/lib/api";
 import { AiInsightSection } from "./shared/AiInsightSection";
 import { CrossSellOpportunities } from "./shared/CrossSellOpportunities";
 import { InfoBar, InfoBarItem } from "./shared/InfoBar";
 import { MetricCard, MetricValue } from "./shared/MetricCard";
-import { RiskFlagsSection } from "./shared/RiskFlagsSection";
 import { SectionHeader } from "./shared/SectionHeader";
 import { useState } from "react";
+import { CompanyInfoBlock } from "./eb/CompanyInfoBlock";
+import { FinancialDataTable } from "./eb/FinancialDataTable";
+import { CapitalBalanceDiagram } from "./eb/CapitalBalanceDiagram";
+import { Qd039Card } from "./eb/Qd039Card";
+import { EbRiskFlagsPriorityList } from "./eb/EbRiskFlagsPriorityList";
+import { StressTestDrawer } from "./eb/StressTestDrawer";
 
 function fileIconFor(filename: string) {
   const ext = filename.split(".").pop()?.toLowerCase();
@@ -189,164 +192,139 @@ function DocumentPanel({ documents }: { documents: DocumentStatus[] }) {
   );
 }
 
-type StressTestState = {
-  revenue_pct: number; margin_pct: number; interest_rate_pct: number; collection_speed_pct: number;
-};
-
-function StressTestPanel({ creditEngine }: { creditEngine?: Record<string, MetricValue> }) {
-  const [deltas, setDeltas] = useState<StressTestState>({
-    revenue_pct: 0, margin_pct: 0, interest_rate_pct: 0, collection_speed_pct: 0,
-  });
-  const [result, setResult] = useState<Awaited<ReturnType<typeof runStressTest>> | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  async function handleRun() {
-    setError(null);
-    try {
-      const inputs: Record<string, number | null> = {};
-      for (const key of ["nwc", "dscr", "icr"]) {
-        const m = creditEngine?.[key];
-        if (m?.input_values) {
-          for (const [k, v] of Object.entries(m.input_values)) {
-            if (typeof v === "number") inputs[k] = v;
-          }
-        }
-      }
-      const r = await runStressTest(inputs, deltas);
-      setResult(r);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Stress test thất bại");
-    }
-  }
-
-  return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6 space-y-3">
-      <SectionHeader
-        icon={SlidersHorizontal}
-        title="Stress Test (kịch bản giả định)"
-        subtitle="Đây là kịch bản giả định do cán bộ nhập, không phải dự báo tài chính chắc chắn."
-      />
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 flex-1">
-          {(Object.keys(deltas) as Array<keyof StressTestState>).map((key) => (
-            <div key={key}>
-              <label className="block text-xs text-gray-500 mb-1">{key} (%)</label>
-              <div className="relative">
-                <input
-                  type="number"
-                  className="w-full border border-gray-200 rounded-lg px-2 py-1.5 pr-6 text-sm focus:outline-none focus:ring-2 focus:ring-msb-orange/40 focus:border-msb-orange"
-                  value={deltas[key]}
-                  onChange={(e) => setDeltas((prev) => ({ ...prev, [key]: Number(e.target.value) }))}
-                />
-                <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-400">%</span>
-              </div>
-            </div>
-          ))}
-        </div>
-        <button
-          onClick={handleRun}
-          className="bg-msb-navy text-white text-sm font-semibold px-4 py-2 rounded-lg shrink-0 hover:brightness-110 transition"
-        >
-          Chạy kịch bản
-        </button>
-      </div>
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      {result && (
-        <div className="text-sm grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t">
-          {Object.entries(result.after).map(([key, after]) => (
-            <div key={key}>
-              <p className="text-gray-500">{key}</p>
-              <p>Trước: {result.before[key]?.value ?? "—"} → Sau: {after.value ?? "—"}</p>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-export default function EbResultPanel({ result }: { result: AssessmentResult }) {
+export default function EbResultPanel({
+  result, onRerunWithPeriod,
+}: {
+  result: AssessmentResult;
+  onRerunWithPeriod?: (period: string) => void;
+}) {
   const overview = result.overview ?? [];
   const summary = result.overview_summary;
+  const [stressOpen, setStressOpen] = useState(false);
 
-  const infoItems: InfoBarItem[] = [
-    { icon: BadgeIcon, label: "Mã hồ sơ", value: result.case_id ?? "—" },
-    { icon: Building2, label: "Khách hàng", value: (result.customer_profile?.customer_name as string) ?? "—" },
-    { icon: FileText, label: "MST", value: (result.customer_profile?.tax_id as string) ?? "—" },
-    { icon: Clock, label: "Thời điểm chạy", value: result.assessed_at ?? "—" },
-  ];
+  const EXTENDED_METRIC_LABELS: Record<string, { label: string; unit: string; note?: string }> = {
+    ...METRIC_LABELS,
+    ebitda: { label: "EBITDA", unit: "VND" },
+    liquidity_balance: { label: "Cân đối thanh khoản", unit: "" },
+  };
 
   return (
-    <div className="space-y-6 mt-6">
-      <InfoBar items={infoItems} banner={result.overall_conclusion} />
+    <div className="mt-6">
+      <InfoBar
+        items={[
+          { icon: BadgeIcon, label: "Mã hồ sơ", value: result.case_id ?? "—" },
+          { icon: Clock, label: "Thời điểm chạy", value: result.assessed_at ?? "—" },
+        ]}
+        banner={result.overall_conclusion}
+      />
 
-      <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6 space-y-3">
-        <SectionHeader
-          icon={ClipboardList}
-          title="A. Thông tin tổng quan"
-          subtitle={
-            summary
-              ? `${summary.checked}/${summary.total} điều kiện đã kiểm tra đủ dữ liệu; ${summary.passed} đạt, ${summary.failed} không đạt, ${summary.pending} chờ xác minh.`
-              : undefined
-          }
-        />
-        <OverviewTable rows={overview} caseId={result.case_id} />
+      <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr_340px] gap-5 mt-5">
+        {/* Cột trái — Hồ sơ & dữ liệu gốc */}
+        <div className="space-y-5 order-4 lg:order-1">
+          <CompanyInfoBlock result={result} onPeriodChange={(y) => onRerunWithPeriod?.(y)} />
+          <FinancialDataTable creditEngine={result.credit_engine as Record<string, MetricValue> | undefined} />
+        </div>
+
+        {/* Cột giữa — Sức khỏe tài chính & quyết định tín dụng */}
+        <div className="space-y-5 order-2">
+          <div className="bg-white rounded-xl border border-gray-100 p-6 space-y-3">
+            <SectionHeader
+              icon={ClipboardList}
+              title="Kết luận thẩm định"
+              subtitle={
+                summary
+                  ? `${summary.checked}/${summary.total} điều kiện đã kiểm tra đủ dữ liệu; kỳ ${result.ho_so_period?.selected ?? "—"}.`
+                  : undefined
+              }
+            />
+            <p className="text-sm font-semibold text-msb-navy">{result.overall_conclusion ?? result.credit_readiness ?? "—"}</p>
+            <p className="text-[11px] text-gray-400">
+              Khuyến nghị sơ bộ từ dữ liệu BCTC — cần phê duyệt theo quy trình tín dụng MSB.
+            </p>
+          </div>
+
+          {result.credit_engine && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {Object.entries(result.credit_engine)
+                .filter(([key]) => key in EXTENDED_METRIC_LABELS)
+                .map(([key, metric]) => {
+                  const meta = EXTENDED_METRIC_LABELS[key];
+                  return (
+                    <MetricCard
+                      key={key}
+                      label={meta.label}
+                      unit={meta.unit}
+                      note={meta.note}
+                      metric={metric as MetricValue}
+                    />
+                  );
+                })}
+            </div>
+          )}
+
+          <CapitalBalanceDiagram check={result.capital_balance_check} />
+          <Qd039Card creditEngine={result.credit_engine as Record<string, MetricValue> | undefined} />
+          <EbRiskFlagsPriorityList flags={result.risk_flags ?? []} />
+
+          <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6 space-y-3">
+            <SectionHeader
+              icon={ClipboardList}
+              title="Thông tin tổng quan"
+              subtitle={
+                summary
+                  ? `${summary.checked}/${summary.total} điều kiện đã kiểm tra đủ dữ liệu; ${summary.passed} đạt, ${summary.failed} không đạt, ${summary.pending} chờ xác minh.`
+                  : undefined
+              }
+            />
+            <OverviewTable rows={overview} caseId={result.case_id} />
+          </div>
+          <DocumentPanel documents={result.documents ?? []} />
+        </div>
+
+        {/* Cột phải — M-Insight AI & bán chéo */}
+        <div className="space-y-5 order-3">
+          <AiInsightSection why={result.why ?? []} creditMemo={result.credit_memo} title="M-Insight AI" />
+
+          <div className="bg-white rounded-xl border border-gray-100 p-5 flex flex-wrap gap-2">
+            <button
+              onClick={() => setStressOpen(true)}
+              className="text-xs font-semibold px-3 py-2 rounded-lg bg-msb-navy text-white"
+            >
+              Stress Test
+            </button>
+            {result.export_available && (
+              <button
+                onClick={async () => {
+                  try {
+                    const blob = await exportMb02(result);
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = "to-trinh-mb02-du-thao.docx";
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  } catch (err) {
+                    alert(err instanceof Error ? err.message : "Xuất tờ trình thất bại.");
+                  }
+                }}
+                className="text-xs font-semibold px-3 py-2 rounded-lg border border-msb-navy text-msb-navy"
+              >
+                <span className="inline-flex items-center gap-1.5">
+                  <FileDown className="h-3.5 w-3.5" />
+                  Soạn tờ trình MB02a
+                </span>
+              </button>
+            )}
+          </div>
+
+          <CrossSellOpportunities
+            opportunities={result.crosssell_opportunities ?? []}
+            title="Cơ hội bán chéo"
+          />
+        </div>
       </div>
 
-      {result.credit_engine && (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6 space-y-3">
-          <SectionHeader icon={TrendingUp} title="B.1 Bốn thẻ chỉ tiêu" />
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {Object.entries(result.credit_engine)
-              .filter(([key]) => key in METRIC_LABELS)
-              .map(([key, metric]) => {
-                const meta = METRIC_LABELS[key];
-                return (
-                  <MetricCard
-                    key={key}
-                    label={meta.label}
-                    unit={meta.unit}
-                    note={meta.note}
-                    metric={metric as MetricValue}
-                  />
-                );
-              })}
-          </div>
-        </div>
-      )}
-
-      <RiskFlagsSection flags={result.risk_flags ?? []} title="C. Cảnh báo rủi ro" />
-      <DocumentPanel documents={result.documents ?? []} />
-      <CrossSellOpportunities
-        opportunities={result.crosssell_opportunities ?? []}
-        title="E. Cơ hội bán chéo"
-      />
-      <AiInsightSection why={result.why ?? []} creditMemo={result.credit_memo} title="F. AI Insight" />
-      <StressTestPanel creditEngine={result.credit_engine as Record<string, MetricValue> | undefined} />
-
-      {result.export_available && (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6">
-          <button
-            onClick={async () => {
-              try {
-                const blob = await exportMb02(result);
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = "to-trinh-mb02-du-thao.docx";
-                a.click();
-                URL.revokeObjectURL(url);
-              } catch (err) {
-                alert(err instanceof Error ? err.message : "Xuất tờ trình thất bại.");
-              }
-            }}
-            className="inline-flex items-center gap-2 border border-msb-navy text-msb-navy font-semibold px-4 py-2 rounded-lg hover:bg-msb-bg transition"
-          >
-            <FileDown className="h-4 w-4" />
-            Soạn tờ trình MB02a
-          </button>
-        </div>
-      )}
+      <StressTestDrawer open={stressOpen} onClose={() => setStressOpen(false)} result={result} />
     </div>
   );
 }

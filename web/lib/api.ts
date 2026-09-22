@@ -279,24 +279,6 @@ export function evidenceFileUrl(caseId: string, fileId: string): string {
   return `/api/eb/files/${encodeURIComponent(caseId)}/${encodeURIComponent(fileId)}`;
 }
 
-export type StressTestResult = {
-  assumptions: Record<string, unknown>;
-  before: Record<string, { value: number | null; status: string }>;
-  after: Record<string, { value: number | null; status: string }>;
-};
-
-export async function runStressTest(
-  inputs: Record<string, number | null>,
-  deltas: { revenue_pct?: number; margin_pct?: number; interest_rate_pct?: number; collection_speed_pct?: number }
-): Promise<StressTestResult> {
-  const resp = await fetch("/api/eb/stress-test", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ inputs, deltas }),
-  });
-  if (!resp.ok) throw new Error(`Stress test thất bại: HTTP ${resp.status}`);
-  return resp.json();
-}
 
 export type HistoryItem = {
   id: number;
