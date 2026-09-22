@@ -4,6 +4,7 @@ import { useState } from "react";
 import Image from "next/image";
 import AssessmentForm from "@/components/AssessmentForm";
 import EbResultPanel from "@/components/EbResultPanel";
+import HistoryPanel from "@/components/HistoryPanel";
 import ResultPanel from "@/components/ResultPanel";
 import CrossSellPanel from "@/components/CrossSellPanel";
 import { AssessmentResult } from "@/lib/api";
@@ -17,6 +18,7 @@ const TAB_LABELS: Record<"rb" | "eb" | "crosssell", string> = {
 export default function Home() {
   const [tab, setTab] = useState<"rb" | "eb" | "crosssell">("rb");
   const [result, setResult] = useState<AssessmentResult | null>(null);
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
 
   return (
     <main className="min-h-screen bg-msb-bg">
@@ -65,7 +67,14 @@ export default function Home() {
           ))}
         </div>
 
-        <AssessmentForm agentType={tab} onResult={setResult} />
+        <AssessmentForm
+          agentType={tab}
+          onResult={(r) => {
+            setResult(r);
+            setHistoryRefreshKey((k) => k + 1);
+          }}
+        />
+        <HistoryPanel agentType={tab} onSelect={setResult} refreshKey={historyRefreshKey} />
         {result && tab === "crosssell" && <CrossSellPanel result={result} />}
         {result && tab === "eb" && <EbResultPanel result={result} />}
         {result && tab === "rb" && <ResultPanel result={result} />}

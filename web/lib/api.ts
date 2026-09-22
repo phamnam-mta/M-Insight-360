@@ -184,3 +184,22 @@ export async function runStressTest(
   if (!resp.ok) throw new Error(`Stress test thất bại: HTTP ${resp.status}`);
   return resp.json();
 }
+
+export type HistoryItem = {
+  id: number;
+  agent_type: string;
+  customer_name: string;
+  tax_id: string;
+  result: AssessmentResult;
+  created_at: string;
+};
+
+export async function fetchHistory(
+  agentType: "rb" | "eb" | "crosssell",
+  limit = 5
+): Promise<HistoryItem[]> {
+  const resp = await fetch(`/api/history?agent_type=${agentType}&limit=${limit}`);
+  if (!resp.ok) throw new Error(`Không tải được lịch sử thẩm định: HTTP ${resp.status}`);
+  const body = await resp.json();
+  return body.items ?? [];
+}
