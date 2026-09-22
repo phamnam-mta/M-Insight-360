@@ -76,3 +76,17 @@ def test_rf05_missing_icr_with_healthy_dscr_is_not_a_clean_pass():
     icr = compute_icr(EbFinancialInputs())
     result = evaluate_rf05_weak_repayment_capacity(dscr, icr)
     assert result.status == "CHƯA ĐÁNH GIÁ"
+
+
+def test_dscr_and_rf05_carry_evidence_refs():
+    from app.agents.eb.financial_inputs import FieldEvidence
+    from app.engine.core.types import EvidenceRef
+
+    ref = EvidenceRef(file_id="f1", filename="pakd.pdf", location="Trang 1", original_text="CFADS: 1.500.000.000")
+    field_evidence = {"cfads_vnd": FieldEvidence(status="COMPUTED", evidence=[ref])}
+    inputs = EbFinancialInputs(cfads_vnd=1_500_000_000, principal_due_vnd=1_000_000_000, interest_due_vnd=200_000_000)
+    dscr = compute_dscr(inputs, field_evidence)
+    assert dscr.evidence["cfads_vnd"] == [ref]
+    icr = compute_icr(EbFinancialInputs(ebit_vnd=800_000_000, interest_expense_vnd=200_000_000))
+    result = evaluate_rf05_weak_repayment_capacity(dscr, icr)
+    assert result.evidence_refs.get("cfads_vnd") == [ref]

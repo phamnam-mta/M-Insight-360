@@ -33,3 +33,16 @@ def test_rf03_not_activated_below_50_percent():
 def test_rf03_not_evaluated_when_missing():
     result = evaluate_rf03_short_term_debt_ratio(compute_short_term_debt_ratio(EbFinancialInputs()))
     assert result.status == "CHƯA ĐÁNH GIÁ"
+
+
+def test_ratio_and_rf03_carry_evidence_refs():
+    from app.agents.eb.financial_inputs import FieldEvidence
+    from app.engine.core.types import EvidenceRef
+
+    ref = EvidenceRef(file_id="f1", filename="bctc.pdf", location="Trang 1", original_text="Vay ngan han: 1.800.000.000")
+    field_evidence = {"short_term_debt_vnd": FieldEvidence(status="COMPUTED", evidence=[ref])}
+    inputs = EbFinancialInputs(short_term_debt_vnd=1_800_000_000, total_liabilities_vnd=3_000_000_000)
+    ratio = compute_short_term_debt_ratio(inputs, field_evidence)
+    assert ratio.evidence["short_term_debt_vnd"] == [ref]
+    result = evaluate_rf03_short_term_debt_ratio(ratio)
+    assert result.evidence_refs["short_term_debt_vnd"] == [ref]

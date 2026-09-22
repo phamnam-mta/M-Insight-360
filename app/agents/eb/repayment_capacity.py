@@ -7,7 +7,13 @@ ICR_THRESHOLD = 1.5
 RF05_POLICY_VERSION = "policy_mode=DEMO_UAT (ngưỡng demo, chưa xác nhận chuẩn MSB chính thức)"
 
 
-def compute_dscr(inputs: EbFinancialInputs) -> Metric:
+def _evidence_for(field_evidence: dict | None, *keys: str) -> dict:
+    if not field_evidence:
+        return {}
+    return {k: field_evidence[k].evidence for k in keys if k in field_evidence}
+
+
+def compute_dscr(inputs: EbFinancialInputs, field_evidence: dict | None = None) -> Metric:
     debt_service = None
     if inputs.principal_due_vnd is not None and inputs.interest_due_vnd is not None:
         debt_service = inputs.principal_due_vnd + inputs.interest_due_vnd
@@ -20,10 +26,11 @@ def compute_dscr(inputs: EbFinancialInputs) -> Metric:
         metric="dscr", value=value, formula="CFADS / (goc_den_han + lai_den_han)",
         input_values={"cfads_vnd": inputs.cfads_vnd, "principal_due_vnd": inputs.principal_due_vnd, "interest_due_vnd": inputs.interest_due_vnd},
         input_sources={"cfads_vnd": "bctc"},
+        evidence=_evidence_for(field_evidence, "cfads_vnd", "principal_due_vnd", "interest_due_vnd"),
     )
 
 
-def compute_icr(inputs: EbFinancialInputs) -> Metric:
+def compute_icr(inputs: EbFinancialInputs, field_evidence: dict | None = None) -> Metric:
     if inputs.ebit_vnd is None or not inputs.interest_expense_vnd:
         return Metric.need_more_data("icr", "EBIT / chi_phi_lai_vay")
     value = round(inputs.ebit_vnd / inputs.interest_expense_vnd, 4)
@@ -31,6 +38,7 @@ def compute_icr(inputs: EbFinancialInputs) -> Metric:
         metric="icr", value=value, formula="EBIT / chi_phi_lai_vay",
         input_values={"ebit_vnd": inputs.ebit_vnd, "interest_expense_vnd": inputs.interest_expense_vnd},
         input_sources={"ebit_vnd": "bctc", "interest_expense_vnd": "bctc"},
+        evidence=_evidence_for(field_evidence, "ebit_vnd", "interest_expense_vnd"),
     )
 
 
@@ -48,10 +56,13 @@ def _insufficient_data(dscr: Metric, icr: Metric) -> RuleResult:
         observed_value="KHÔNG ĐỦ DỮ LIỆU",
         verification_question="Hồ sơ có lịch trả nợ (gốc/lãi đến hạn) và số liệu CFADS/EBIT để tính DSCR, ICR không?",
         recommended_action="Bổ sung lịch trả nợ và báo cáo tài chính chi tiết trước khi đánh giá khả năng trả nợ.",
+        evidence_refs={**dscr.evidence, **icr.evidence},
     )
 
 
-def evaluate_rf05_weak_repayment_capacity(dscr: Metric, icr: Metric) -> RuleResult:
+def evaluate_rf05_weak_repayment_capacity(
+    dscr: Metric, icr: Metric, field_evidence: dict | None = None
+) -> RuleResult:
     if dscr.status == "NEED_MORE_DATA" and icr.status == "NEED_MORE_DATA":
         return _insufficient_data(dscr, icr)
 
@@ -76,6 +87,7 @@ def evaluate_rf05_weak_repayment_capacity(dscr: Metric, icr: Metric) -> RuleResu
             policy_version=RF05_POLICY_VERSION,
             verification_question="Nguồn trả nợ/CFADS có ổn định không? Khách hàng có phương án bổ sung tài sản đảm bảo hoặc nguồn thu thay thế không?",
             recommended_action="Yêu cầu phương án tăng cường nguồn trả nợ hoặc tài sản đảm bảo bổ sung; chuyển Credit Officer thẩm định kỹ.",
+            evidence_refs={**dscr.evidence, **icr.evidence},
         )
 
     # Neither metric is weak — but spec §6 forbids reporting a clean pass while
@@ -87,4 +99,5 @@ def evaluate_rf05_weak_repayment_capacity(dscr: Metric, icr: Metric) -> RuleResu
     return RuleResult(
         rule_id="RF05", rule_name="Khả năng trả nợ yếu", status="KHÔNG KÍCH HOẠT",
         policy_version=RF05_POLICY_VERSION,
+        evidence_refs={**dscr.evidence, **icr.evidence},
     )

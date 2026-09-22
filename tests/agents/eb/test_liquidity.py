@@ -50,3 +50,17 @@ def test_rf01_not_activated_when_healthy():
 def test_rf01_not_evaluated_when_data_missing():
     result = evaluate_rf01_capital_imbalance(EbFinancialInputs(), compute_nwc(EbFinancialInputs()))
     assert result.status == "CHƯA ĐÁNH GIÁ"
+
+
+def test_nwc_carries_evidence_when_field_evidence_provided():
+    from app.agents.eb.financial_inputs import FieldEvidence
+    from app.engine.core.types import EvidenceRef
+
+    ref = EvidenceRef(file_id="f1", filename="bctc.pdf", location="Trang 1", original_text="Tai san ngan han: 2.000.000.000")
+    field_evidence = {
+        "current_assets_vnd": FieldEvidence(status="COMPUTED", evidence=[ref]),
+        "current_liabilities_vnd": FieldEvidence(status="COMPUTED", evidence=[]),
+    }
+    inputs = EbFinancialInputs(current_assets_vnd=2_000_000_000, current_liabilities_vnd=2_500_000_000)
+    metric = compute_nwc(inputs, field_evidence)
+    assert metric.evidence["current_assets_vnd"] == [ref]

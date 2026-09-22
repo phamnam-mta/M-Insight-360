@@ -26,3 +26,14 @@ def test_rf04_zero_bctc_revenue_is_chua_danh_gia_not_crash():
     inputs = EbFinancialInputs(revenue_bctc_vnd=0, revenue_dsp_vnd=100)
     result = evaluate_rf04_dsp_mismatch(inputs)
     assert result.status == "CHƯA ĐÁNH GIÁ"
+
+
+def test_rf04_carries_evidence_refs_when_field_evidence_provided():
+    from app.agents.eb.financial_inputs import FieldEvidence
+    from app.engine.core.types import EvidenceRef
+
+    ref = EvidenceRef(file_id="f1", filename="bctc.pdf", location="Trang 1", original_text="Doanh thu thuan: 1.000.000.000")
+    field_evidence = {"revenue_bctc_vnd": FieldEvidence(status="COMPUTED", evidence=[ref])}
+    inputs = EbFinancialInputs(revenue_bctc_vnd=1_000_000_000, revenue_dsp_vnd=1_100_000_000)
+    result = evaluate_rf04_dsp_mismatch(inputs, field_evidence)
+    assert result.evidence_refs["revenue_bctc_vnd"] == [ref]

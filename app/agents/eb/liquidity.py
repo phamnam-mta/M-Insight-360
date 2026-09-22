@@ -5,7 +5,13 @@ from .financial_inputs import EbFinancialInputs
 RF01_POLICY_VERSION = "policy_mode=DEMO_UAT (ngưỡng demo, chưa xác nhận chuẩn MSB chính thức)"
 
 
-def compute_nwc(inputs: EbFinancialInputs) -> Metric:
+def _evidence_for(field_evidence: dict | None, *keys: str) -> dict:
+    if not field_evidence:
+        return {}
+    return {k: field_evidence[k].evidence for k in keys if k in field_evidence}
+
+
+def compute_nwc(inputs: EbFinancialInputs, field_evidence: dict | None = None) -> Metric:
     if inputs.current_assets_vnd is None or inputs.current_liabilities_vnd is None:
         return Metric.need_more_data("nwc", "tai_san_ngan_han - no_ngan_han")
     value = inputs.current_assets_vnd - inputs.current_liabilities_vnd
@@ -15,10 +21,11 @@ def compute_nwc(inputs: EbFinancialInputs) -> Metric:
         formula="tai_san_ngan_han - no_ngan_han",
         input_values={"current_assets_vnd": inputs.current_assets_vnd, "current_liabilities_vnd": inputs.current_liabilities_vnd},
         input_sources={"current_assets_vnd": "bctc", "current_liabilities_vnd": "bctc"},
+        evidence=_evidence_for(field_evidence, "current_assets_vnd", "current_liabilities_vnd"),
     )
 
 
-def compute_current_ratio(inputs: EbFinancialInputs) -> Metric:
+def compute_current_ratio(inputs: EbFinancialInputs, field_evidence: dict | None = None) -> Metric:
     if (
         inputs.current_assets_vnd is None
         or inputs.current_liabilities_vnd is None
@@ -32,16 +39,20 @@ def compute_current_ratio(inputs: EbFinancialInputs) -> Metric:
         formula="tai_san_ngan_han / no_ngan_han",
         input_values={"current_assets_vnd": inputs.current_assets_vnd, "current_liabilities_vnd": inputs.current_liabilities_vnd},
         input_sources={"current_assets_vnd": "bctc", "current_liabilities_vnd": "bctc"},
+        evidence=_evidence_for(field_evidence, "current_assets_vnd", "current_liabilities_vnd"),
     )
 
 
-def evaluate_rf01_capital_imbalance(inputs: EbFinancialInputs, nwc: Metric) -> RuleResult:
+def evaluate_rf01_capital_imbalance(
+    inputs: EbFinancialInputs, nwc: Metric, field_evidence: dict | None = None
+) -> RuleResult:
     if inputs.equity_vnd is None and nwc.status == "NEED_MORE_DATA":
         return RuleResult(
             rule_id="RF01", rule_name="Mất cân đối vốn", status="CHƯA ĐÁNH GIÁ",
             comment="Thiếu vốn chủ sở hữu và/hoặc dữ liệu vốn lưu động ròng để đánh giá.",
             verification_question="Hồ sơ có Bảng cân đối kế toán kỳ gần nhất để xác định VCSH và NWC không?",
             recommended_action="Bổ sung BCTC/Bảng cân đối kế toán trước khi kết luận về mất cân đối vốn.",
+            evidence_refs=nwc.evidence,
         )
 
     equity_negative = inputs.equity_vnd is not None and inputs.equity_vnd <= 0
@@ -62,10 +73,12 @@ def evaluate_rf01_capital_imbalance(inputs: EbFinancialInputs, nwc: Metric) -> R
             policy_version=RF01_POLICY_VERSION,
             verification_question="Nguồn vốn ngắn hạn có đang tài trợ cho tài sản dài hạn không? Kế hoạch tái cơ cấu vốn của khách hàng là gì?",
             recommended_action="Yêu cầu khách hàng giải trình và bổ sung phương án tăng vốn/cơ cấu lại nguồn vốn trước khi cấp tín dụng.",
+            evidence_refs=nwc.evidence,
         )
 
     return RuleResult(
         rule_id="RF01", rule_name="Mất cân đối vốn", status="KHÔNG KÍCH HOẠT",
         observed_value=nwc.value if nwc.status == "OK" else inputs.equity_vnd,
         policy_version=RF01_POLICY_VERSION,
+        evidence_refs=nwc.evidence,
     )
