@@ -13,7 +13,7 @@ SYSTEM_PROMPT = (
     "riêng của khách hàng khác)."
 )
 
-_client = httpx.Client(timeout=60.0)
+_client = httpx.Client(timeout=300.0)
 
 
 def generate_narrative(computed: dict) -> dict:

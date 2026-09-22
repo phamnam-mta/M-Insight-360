@@ -19,7 +19,7 @@ SYSTEM_PROMPT = (
 
 _DEGRADED_MEMO = "Không thể sinh nhận xét AI cho hồ sơ này vào lúc này — vui lòng xem các số liệu đã tính toán bên trên."
 
-_client = httpx.Client(timeout=60.0)
+_client = httpx.Client(timeout=300.0)
 
 
 def generate_narrative(computed: dict) -> dict:

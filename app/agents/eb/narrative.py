@@ -13,7 +13,7 @@ SYSTEM_PROMPT = (
     "xem xét; không tự phê duyệt, cam kết cấp hạn mức hoặc thay thế kết luận thẩm định của MSB.\""
 )
 
-_client = httpx.Client(timeout=60.0)
+_client = httpx.Client(timeout=300.0)
 
 
 def generate_narrative(computed: dict) -> dict:

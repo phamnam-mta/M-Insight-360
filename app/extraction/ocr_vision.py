@@ -12,7 +12,7 @@ OCR_PROMPT = (
 )
 
 # Module-level client so tests can monkeypatch the transport.
-_client = httpx.Client(timeout=60.0)
+_client = httpx.Client(timeout=300.0)
 
 
 def ocr_image(image_bytes: bytes, model: str | None = None) -> str:
