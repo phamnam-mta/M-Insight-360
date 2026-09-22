@@ -1,5 +1,9 @@
 from app.agents.eb.financial_inputs import EbFinancialInputs
-from app.agents.eb.leverage import compute_short_term_debt_ratio, evaluate_rf03_short_term_debt_ratio
+from app.agents.eb.leverage import (
+    compute_short_term_debt_ratio,
+    evaluate_rf03_short_term_debt_ratio,
+    evaluate_rf06_receivables_inventory_concentration,
+)
 
 
 def test_ratio_computed():
@@ -46,3 +50,21 @@ def test_ratio_and_rf03_carry_evidence_refs():
     assert ratio.evidence["short_term_debt_vnd"] == [ref]
     result = evaluate_rf03_short_term_debt_ratio(ratio)
     assert result.evidence_refs["short_term_debt_vnd"] == [ref]
+
+
+def test_rf06_activates_above_70_pct_concentration():
+    inputs = EbFinancialInputs(receivables_vnd=500_000_000, inventory_vnd=300_000_000, current_assets_vnd=1_000_000_000)
+    result = evaluate_rf06_receivables_inventory_concentration(inputs)
+    assert result.status == "KÍCH HOẠT"
+    assert result.severity == "MEDIUM"
+
+
+def test_rf06_not_activated_below_threshold():
+    inputs = EbFinancialInputs(receivables_vnd=100_000_000, inventory_vnd=100_000_000, current_assets_vnd=1_000_000_000)
+    result = evaluate_rf06_receivables_inventory_concentration(inputs)
+    assert result.status == "KHÔNG KÍCH HOẠT"
+
+
+def test_rf06_not_evaluated_without_data():
+    result = evaluate_rf06_receivables_inventory_concentration(EbFinancialInputs())
+    assert result.status == "CHƯA ĐÁNH GIÁ"

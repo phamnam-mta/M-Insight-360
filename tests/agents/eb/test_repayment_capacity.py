@@ -1,5 +1,10 @@
 from app.agents.eb.financial_inputs import EbFinancialInputs
-from app.agents.eb.repayment_capacity import compute_dscr, compute_icr, evaluate_rf05_weak_repayment_capacity
+from app.agents.eb.repayment_capacity import (
+    compute_dscr,
+    compute_icr,
+    evaluate_rf05_weak_repayment_capacity,
+    evaluate_rf07_high_interest_burden,
+)
 
 
 def test_dscr_computed():
@@ -113,3 +118,21 @@ def test_dscr_and_rf05_carry_evidence_refs():
     icr = compute_icr(EbFinancialInputs(pbt_vnd=600_000_000, interest_expense_vnd=200_000_000))
     result = evaluate_rf05_weak_repayment_capacity(dscr, icr)
     assert result.evidence_refs.get("pat_vnd") == [ref]
+
+
+def test_rf07_activates_when_interest_exceeds_30pct_of_ebit():
+    inputs = EbFinancialInputs(pbt_vnd=600_000_000, interest_expense_vnd=300_000_000)  # EBIT = 900M, 300/900=33%
+    result = evaluate_rf07_high_interest_burden(inputs)
+    assert result.status == "KÍCH HOẠT"
+    assert result.severity == "MEDIUM"
+
+
+def test_rf07_not_activated_below_threshold():
+    inputs = EbFinancialInputs(pbt_vnd=600_000_000, interest_expense_vnd=100_000_000)  # EBIT=700M, 100/700=14%
+    result = evaluate_rf07_high_interest_burden(inputs)
+    assert result.status == "KHÔNG KÍCH HOẠT"
+
+
+def test_rf07_not_evaluated_without_data():
+    result = evaluate_rf07_high_interest_burden(EbFinancialInputs())
+    assert result.status == "CHƯA ĐÁNH GIÁ"

@@ -116,3 +116,33 @@ def evaluate_rf05_weak_repayment_capacity(
         policy_version=RF05_POLICY_VERSION,
         evidence_refs={**dscr.evidence, **icr.evidence},
     )
+
+
+RF07_THRESHOLD = 0.30
+RF07_POLICY_VERSION = "policy_mode=DEMO_UAT (ngưỡng demo, chưa xác nhận chuẩn MSB chính thức)"
+
+
+def evaluate_rf07_high_interest_burden(inputs: EbFinancialInputs, field_evidence: dict | None = None) -> RuleResult:
+    ebit = resolve_ebit_vnd(inputs)
+    if ebit is None or not inputs.interest_expense_vnd or ebit <= 0:
+        return RuleResult(
+            rule_id="RF07", rule_name="Chi phí lãi vay lớn bất thường so với EBIT", status="CHƯA ĐÁNH GIÁ",
+            comment="Thiếu EBIT hoặc chi phí lãi vay để đánh giá.",
+            verification_question="Hồ sơ có LNTT, chi phí lãi vay đầy đủ để tính EBIT không?",
+            recommended_action="Bổ sung báo cáo kết quả kinh doanh chi tiết.",
+        )
+    ratio = round(inputs.interest_expense_vnd / ebit, 4)
+    if ratio > RF07_THRESHOLD:
+        return RuleResult(
+            rule_id="RF07", rule_name="Chi phí lãi vay lớn bất thường so với EBIT", status="KÍCH HOẠT", severity="MEDIUM",
+            evidence=[f"Chi phí lãi vay / EBIT = {ratio} (> {RF07_THRESHOLD})"],
+            threshold=f"quy tắc demo: > {RF07_THRESHOLD * 100:.0f}% EBIT",
+            comment="Cảnh báo sớm trước khi ICR chạm ngưỡng 1.5x — cấu trúc chi phí lãi vay đã cao.",
+            observed_value=ratio, policy_version=RF07_POLICY_VERSION,
+            verification_question="Cơ cấu kỳ hạn nợ và khả năng đàm phán lãi suất hiện tại thế nào?",
+            recommended_action="Xem xét cơ cấu kỳ hạn nợ hoặc bổ sung nguồn trả nợ.",
+        )
+    return RuleResult(
+        rule_id="RF07", rule_name="Chi phí lãi vay lớn bất thường so với EBIT", status="KHÔNG KÍCH HOẠT",
+        observed_value=ratio, policy_version=RF07_POLICY_VERSION,
+    )
