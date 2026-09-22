@@ -233,8 +233,10 @@ async def assess(
 
 
 @router.post("/export")
-async def export(computed: dict) -> Response:
-    docx_bytes = build_mb02_docx(computed)
+async def export(payload: dict) -> Response:
+    computed = payload["computed"] if "computed" in payload else payload
+    stress_scenario = payload.get("stress_scenario") if "computed" in payload else None
+    docx_bytes = build_mb02_docx(computed, stress_scenario)
     return Response(
         content=docx_bytes,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",

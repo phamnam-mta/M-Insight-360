@@ -25,7 +25,7 @@ def _format_metric_value(metric) -> str:
     return str(value)
 
 
-def build_mb02_docx(computed: dict) -> bytes:
+def build_mb02_docx(computed: dict, stress_scenario: dict | None = None) -> bytes:
     computed = computed or {}
     profile = computed.get("customer_profile") or {}
     document = docx.Document()
@@ -98,6 +98,17 @@ def build_mb02_docx(computed: dict) -> bytes:
         document.add_paragraph(line, style="List Bullet")
         if row.get("reason_if_incomplete"):
             document.add_paragraph(f"  Lý do: {row['reason_if_incomplete']}")
+
+    if stress_scenario:
+        document.add_heading("I. Kịch bản Stress Test đính kèm", level=2)
+        document.add_paragraph(f"Tên kịch bản: {stress_scenario.get('name', '[chưa có]')}")
+        response = stress_scenario.get("response", {})
+        before_dscr = _format_metric_value(response.get("before", {}).get("dscr"))
+        after_dscr = _format_metric_value(response.get("after", {}).get("dscr"))
+        document.add_paragraph(f"DSCR trước stress: {before_dscr} → sau stress: {after_dscr}")
+        document.add_paragraph(
+            "Mô phỏng theo giả định — không thay thế thẩm định tín dụng và phê duyệt MSB."
+        )
 
     document.add_paragraph("")
     document.add_paragraph(DISCLAIMER)

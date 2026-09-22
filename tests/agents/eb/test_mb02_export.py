@@ -74,3 +74,21 @@ def test_docx_overview_section_matches_json_values():
     assert "PASS" in full_text
     assert "Lịch sử quan hệ tín dụng" in full_text
     assert "Cần dữ liệu CIC." in full_text
+
+
+def test_export_includes_stress_scenario_section_when_provided():
+    scenario = {
+        "name": "Thận trọng",
+        "request": {"deltas": {"revenue_pct": -10, "ebit_pct": -15, "interest_pct": 15}},
+        "response": {"before": {"dscr": {"value": 1.3}}, "after": {"dscr": {"value": 0.95}}},
+    }
+    docx_bytes = build_mb02_docx({"customer_profile": {"customer_name": "X", "tax_id": "1"}}, stress_scenario=scenario)
+    document = docx.Document(io.BytesIO(docx_bytes))
+    full_text = "\n".join(p.text for p in document.paragraphs)
+    assert "Thận trọng" in full_text
+    assert "0.95" in full_text
+
+
+def test_export_without_stress_scenario_is_unaffected():
+    docx_bytes = build_mb02_docx({"customer_profile": {"customer_name": "X", "tax_id": "1"}})
+    assert len(docx_bytes) > 0
