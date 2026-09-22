@@ -44,6 +44,7 @@ from .repayment_capacity import (
     evaluate_rf05_weak_repayment_capacity,
     evaluate_rf07_high_interest_burden,
 )
+from .stress_scenarios import list_scenarios, save_scenario
 from .stress_test import run_stress_test
 
 router = APIRouter(prefix="/api/eb", tags=["eb"])
@@ -252,10 +253,32 @@ async def stress_test(payload: dict) -> dict:
     return run_stress_test(
         inputs,
         revenue_pct=deltas.get("revenue_pct", 0.0),
-        margin_pct=deltas.get("margin_pct", 0.0),
-        interest_rate_pct=deltas.get("interest_rate_pct", 0.0),
-        collection_speed_pct=deltas.get("collection_speed_pct", 0.0),
+        ebit_pct=deltas.get("ebit_pct", 0.0),
+        interest_pct=deltas.get("interest_pct", 0.0),
+        receivable_days_add=deltas.get("receivable_days_add", 0.0),
+        inventory_pct=deltas.get("inventory_pct", 0.0),
+        principal_due_pct=deltas.get("principal_due_pct", 0.0),
+        comprehensive=payload.get("comprehensive_mode", False),
     )
+
+
+@router.post("/stress-test/scenarios")
+async def save_stress_scenario(payload: dict) -> dict:
+    settings = get_settings()
+    init_db(settings.db_path)
+    scenario_id = save_scenario(
+        settings.db_path,
+        case_id=payload["case_id"], name=payload["name"], created_by=payload.get("created_by", "RM"),
+        report_period=payload.get("report_period"), request=payload.get("request", {}), response=payload.get("response", {}),
+    )
+    return {"id": scenario_id}
+
+
+@router.get("/stress-test/scenarios")
+async def get_stress_scenarios(case_id: str) -> dict:
+    settings = get_settings()
+    init_db(settings.db_path)
+    return {"scenarios": list_scenarios(settings.db_path, case_id)}
 
 
 @router.get("/files/{case_id}/{file_id}")

@@ -407,13 +407,36 @@ def test_assess_endpoint_honors_explicit_report_period(monkeypatch, tmp_path):
     assert rf01["observed_value"] == 400_000_000
 
 
-def test_stress_test_endpoint_recomputes_metrics():
-    client = TestClient(app)
-    resp = client.post("/api/eb/stress-test", json={
-        "inputs": {"ebit_vnd": 800_000_000, "interest_expense_vnd": 200_000_000},
-        "deltas": {"margin_pct": -50},
-    })
+def test_stress_test_v2_endpoint_returns_new_contract():
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/eb/stress-test",
+            json={
+                "inputs": {"net_revenue_vnd": 1_000_000_000, "pbt_vnd": 200_000_000, "pat_vnd": 160_000_000,
+                           "interest_expense_vnd": 50_000_000, "interest_due_vnd": 50_000_000, "principal_due_vnd": 100_000_000,
+                           "depreciation_vnd": 20_000_000},
+                "deltas": {"revenue_pct": -10, "ebit_pct": -15, "interest_pct": 15},
+            },
+        )
     assert resp.status_code == 200
     body = resp.json()
-    assert body["before"]["icr"]["value"] == 4.0
-    assert body["after"]["icr"]["value"] == 2.0
+    assert "conclusions" in body
+    assert "buffers" in body
+    assert body["disclaimer"]
+
+
+def test_save_and_list_stress_scenario_endpoints(tmp_path, monkeypatch):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "scenario_test.db"))
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    with TestClient(app) as client:
+        save_resp = client.post(
+            "/api/eb/stress-test/scenarios",
+            json={"case_id": "EB-123", "name": "Bất lợi", "created_by": "RM", "report_period": "2025",
+                  "request": {"preset": "bat_loi"}, "response": {"after": {}}},
+        )
+        assert save_resp.status_code == 200
+        list_resp = client.get("/api/eb/stress-test/scenarios", params={"case_id": "EB-123"})
+    assert list_resp.status_code == 200
+    assert list_resp.json()["scenarios"][0]["name"] == "Bất lợi"
