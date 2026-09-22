@@ -22,30 +22,30 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-msb-bg">
-      <header className="relative overflow-hidden bg-gradient-to-br from-msb-navy via-msb-navy to-[#0f2d5c]">
+      <header className="relative overflow-hidden bg-gradient-to-br from-[#eef1fa] via-[#eef1fa] to-[#e4e9f7]">
         <div
-          className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-sky-400/20 blur-3xl"
+          className="pointer-events-none absolute -right-16 -top-24 h-72 w-72 rounded-full bg-indigo-300/25 blur-3xl"
           aria-hidden
         />
         <div
-          className="pointer-events-none absolute right-10 bottom-0 h-56 w-56 rounded-full bg-msb-orange/10 blur-3xl"
+          className="pointer-events-none absolute right-24 top-10 h-40 w-40 rounded-full bg-msb-orange/10 blur-2xl"
           aria-hidden
         />
         <div
-          className="pointer-events-none absolute right-0 top-1/2 hidden -translate-y-1/2 md:block"
+          className="pointer-events-none absolute right-0 top-0 hidden h-full md:block"
           aria-hidden
         >
-          <svg width="260" height="140" viewBox="0 0 260 140" fill="none">
+          <svg width="320" height="170" viewBox="0 0 320 170" fill="none">
             <path
-              d="M0 90C50 40 90 130 140 70C180 22 220 60 260 10"
-              stroke="white"
-              strokeOpacity="0.12"
+              d="M0 100C60 50 110 140 160 80C200 32 250 70 320 20"
+              stroke="#6E7FCB"
+              strokeOpacity="0.35"
               strokeWidth="2"
             />
             <path
-              d="M0 120C60 80 100 150 150 100C190 60 230 90 260 50"
+              d="M20 140C80 100 120 170 170 120C210 80 260 110 320 60"
               stroke="#F4600C"
-              strokeOpacity="0.18"
+              strokeOpacity="0.25"
               strokeWidth="2"
             />
           </svg>
@@ -54,14 +54,14 @@ export default function Home() {
         <div className="relative px-6 py-6 md:py-7 max-w-5xl mx-auto">
           <div className="flex items-center justify-between gap-4 mb-4">
             <Image
-              src="/msb-logo-white.svg"
+              src="/msb-logo-color.svg"
               alt="MSB"
               width={72}
               height={18}
               className="shrink-0"
               priority
             />
-            <p className="text-right text-[11px] leading-tight text-white/60 hidden sm:block">
+            <p className="text-right text-[11px] leading-tight text-gray-400 hidden sm:block">
               Smarter Data
               <br />
               Bigger Opportunities
@@ -71,17 +71,19 @@ export default function Home() {
             <p className="text-[11px] font-semibold tracking-widest text-msb-orange uppercase">
               Hệ thống quản lý công tác
             </p>
-            <h1 className="text-xl md:text-2xl font-bold text-white leading-snug mt-1">
+            <h1 className="text-xl md:text-2xl font-bold text-msb-navy leading-snug mt-1">
               Trợ lý thẩm định tín dụng
               <br className="hidden sm:block" /> Toàn diện MSB
             </h1>
-            <p className="text-xs text-white/70 mt-2 max-w-2xl leading-relaxed">
+            <p className="text-xs text-gray-500 mt-2 max-w-2xl leading-relaxed">
               Thẩm định Tín dụng KHDN (EB) &amp; KHCN (RB) Hộ kinh doanh · Tự động bóc tách BCTC, tính
               NWC, DSCR, ICR, Cross-sell và xuất Tờ trình chỉ trong vài giây.
             </p>
           </div>
         </div>
       </header>
+
+      <div className="border-b border-gray-200/70" />
 
       <div className={`mx-auto px-4 py-8 ${tab === "eb" ? "max-w-6xl" : "max-w-3xl"}`}>
         <div className="flex gap-2 mb-6">

@@ -6,6 +6,7 @@ import {
   Badge as BadgeIcon,
   Brain,
   Building2,
+  CheckCircle2,
   Clock,
   ClipboardList,
   File,
@@ -130,27 +131,27 @@ function EvidenceCell({ row, caseId }: { row: ConditionRow; caseId?: string }) {
 
 function OverviewTable({ rows, caseId }: { rows: ConditionRow[]; caseId?: string }) {
   return (
-    <div className="overflow-x-auto rounded-lg border border-gray-100">
+    <div className="overflow-x-auto">
       <table className="w-full text-sm border-collapse">
         <thead>
-          <tr className="text-left bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
-            <th className="py-2.5 px-3 font-semibold">Tên điều kiện</th>
-            <th className="py-2.5 px-3 font-semibold">Giá trị/hiện trạng thực tế</th>
-            <th className="py-2.5 px-3 font-semibold">Điều kiện đối chiếu</th>
-            <th className="py-2.5 px-3 font-semibold">Kết quả</th>
-            <th className="py-2.5 px-3 font-semibold">Nguồn chứng cứ và ngày dữ liệu</th>
-            <th className="py-2.5 px-3 font-semibold">Lý do/chứng từ còn thiếu</th>
+          <tr className="text-left border-b border-gray-200 text-gray-500">
+            <th className="py-2 px-2 font-semibold">Tên điều kiện</th>
+            <th className="py-2 px-2 font-semibold">Giá trị/hiện trạng thực tế</th>
+            <th className="py-2 px-2 font-semibold">Điều kiện đối chiếu</th>
+            <th className="py-2 px-2 font-semibold">Kết quả</th>
+            <th className="py-2 px-2 font-semibold">Nguồn chứng cứ và ngày dữ liệu</th>
+            <th className="py-2 px-2 font-semibold">Lý do/chứng từ còn thiếu</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((row) => (
-            <tr key={row.condition_id} className="border-t border-gray-100 align-top hover:bg-gray-50/60">
-              <td className="py-2.5 px-3 font-medium text-msb-navy">{row.condition_name}</td>
-              <td className="py-2.5 px-3">{formatObservedValue(row)}</td>
-              <td className="py-2.5 px-3 text-gray-600">{row.compare_rule}</td>
-              <td className="py-2.5 px-3"><ResultBadge result={row.result} /></td>
-              <td className="py-2.5 px-3"><EvidenceCell row={row} caseId={caseId} /></td>
-              <td className="py-2.5 px-3 text-gray-600">{row.reason_if_incomplete ?? "—"}</td>
+            <tr key={row.condition_id} className="border-b border-gray-100 align-top hover:bg-gray-50/60">
+              <td className="py-2.5 px-2 font-medium text-msb-navy">{row.condition_name}</td>
+              <td className="py-2.5 px-2">{formatObservedValue(row)}</td>
+              <td className="py-2.5 px-2 text-gray-600">{row.compare_rule}</td>
+              <td className="py-2.5 px-2"><ResultBadge result={row.result} /></td>
+              <td className="py-2.5 px-2"><EvidenceCell row={row} caseId={caseId} /></td>
+              <td className="py-2.5 px-2 text-gray-600">{row.reason_if_incomplete ?? "—"}</td>
             </tr>
           ))}
         </tbody>
@@ -232,7 +233,15 @@ function RiskFlagsSection({ flags }: { flags: RiskFlag[] }) {
           ))}
         </ul>
       ) : (
-        <p className="text-sm text-gray-500">Không có cảnh báo được kích hoạt trong số các quy tắc đã kiểm tra.</p>
+        <div>
+          <p className="text-sm text-gray-500 mb-2">
+            Không có cảnh báo được kích hoạt trong số các quy tắc đã kiểm tra.
+          </p>
+          <div className="flex items-center gap-2 border border-gray-100 rounded-lg px-3 py-2.5 text-sm text-gray-500 bg-gray-50/60">
+            <CheckCircle2 className="h-4 w-4 text-gray-400 shrink-0" />
+            Chưa có cảnh báo
+          </div>
+        </div>
       )}
       {undetermined.length > 0 && (
         <div className="pt-2 border-t">
@@ -285,9 +294,7 @@ function DocumentPanel({ documents }: { documents: DocumentStatus[] }) {
           return (
             <li key={i} className="py-2.5 flex justify-between items-center gap-3">
               <div className="flex items-center gap-3 min-w-0">
-                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-msb-bg text-msb-navy shrink-0">
-                  <FileIcon className="h-4 w-4" />
-                </span>
+                <FileIcon className="h-4 w-4 text-gray-400 shrink-0" />
                 <div className="min-w-0">
                   <p className="font-medium truncate">{d.filename}</p>
                   <p className="text-xs text-gray-500">{d.doc_type ?? "—"} · {d.cited_field_count} trường đã trích xuất</p>
@@ -470,10 +477,8 @@ export default function EbResultPanel({ result }: { result: AssessmentResult }) 
       <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6 space-y-3">
         <div className="flex flex-wrap gap-x-8 gap-y-3 text-sm">
           {infoItems.map(({ icon: Icon, label, value }) => (
-            <div key={label} className="flex items-center gap-2.5">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-msb-bg text-msb-navy shrink-0">
-                <Icon className="h-4 w-4" />
-              </span>
+            <div key={label} className="flex items-center gap-2">
+              <Icon className="h-4 w-4 text-gray-400 shrink-0" />
               <div>
                 <span className="text-gray-500 text-xs">{label}</span>
                 <p className="font-semibold text-msb-navy">{value}</p>
