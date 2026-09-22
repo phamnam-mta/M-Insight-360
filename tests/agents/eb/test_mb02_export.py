@@ -45,3 +45,32 @@ def test_export_handles_completely_empty_computed_dict():
     raw = build_mb02_docx({})
     doc = docx.Document(io.BytesIO(raw))
     assert len(doc.paragraphs) > 0
+
+
+def test_docx_overview_section_matches_json_values():
+    computed = {
+        "customer_profile": {"customer_name": "CONG TY TNHH TEST", "tax_id": "0100000001"},
+        "credit_engine": {}, "risk_flags": [], "missing_data": [],
+        "recommendation": "PROCEED_FOR_HUMAN_REVIEW", "why": [], "credit_memo": "",
+        "overview": [
+            {
+                "condition_id": "C08", "condition_name": "Vốn chủ sở hữu",
+                "observed": {"value": 500000000.0, "status": "COMPUTED"},
+                "compare_rule": "> 0", "result": "PASS", "reason_if_incomplete": None,
+            },
+            {
+                "condition_id": "C11", "condition_name": "Lịch sử quan hệ tín dụng",
+                "observed": {"value": None, "status": "MISSING_DATA"},
+                "compare_rule": "...", "result": "PENDING_INTERNAL_CHECK",
+                "reason_if_incomplete": "Cần dữ liệu CIC.",
+            },
+        ],
+    }
+    docx_bytes = build_mb02_docx(computed)
+    doc = docx.Document(io.BytesIO(docx_bytes))
+    full_text = "\n".join(p.text for p in doc.paragraphs)
+    assert "Vốn chủ sở hữu" in full_text
+    assert "500000000.0" in full_text
+    assert "PASS" in full_text
+    assert "Lịch sử quan hệ tín dụng" in full_text
+    assert "Cần dữ liệu CIC." in full_text

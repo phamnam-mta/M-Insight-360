@@ -84,6 +84,21 @@ def build_mb02_docx(computed: dict) -> bytes:
     document.add_heading("G. Tóm tắt dự thảo Credit Memo", level=2)
     document.add_paragraph(computed.get("credit_memo") or "[chưa có]")
 
+    document.add_heading("H. Bảng điều kiện tổng quan (mục A)", level=2)
+    overview = computed.get("overview") or []
+    if not overview:
+        document.add_paragraph("Chưa có dữ liệu điều kiện tổng quan.")
+    for row in overview:
+        if not isinstance(row, dict):
+            continue
+        observed = row.get("observed") or {}
+        value = observed.get("value")
+        value_text = "Chưa có dữ liệu" if value is None else str(value)
+        line = f"{row.get('condition_name', '?')}: {value_text} — Kết quả: {row.get('result', '?')}"
+        document.add_paragraph(line, style="List Bullet")
+        if row.get("reason_if_incomplete"):
+            document.add_paragraph(f"  Lý do: {row['reason_if_incomplete']}")
+
     document.add_paragraph("")
     document.add_paragraph(DISCLAIMER)
 
