@@ -22,24 +22,60 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-msb-bg">
-      <header className="relative overflow-hidden bg-gradient-to-r from-msb-navy to-msb-navy/90">
-        <div className="relative px-6 py-5 md:py-6 max-w-5xl mx-auto flex items-center gap-4">
-          <Image
-            src="/msb-logo-white.svg"
-            alt="MSB"
-            width={72}
-            height={18}
-            className="shrink-0 hidden sm:block"
-            priority
-          />
-          <div className="min-w-0">
-            <h1 className="text-lg md:text-xl font-bold text-white leading-snug">
-              TRỢ LÝ THẨM ĐỊNH TÍN DỤNG TOÀN DIỆN MSB
-            </h1>
-            <p className="text-sm font-semibold text-msb-orange mt-0.5">
-              Nhanh hơn. Sâu hơn. Chính xác hơn.
+      <header className="relative overflow-hidden bg-gradient-to-br from-msb-navy via-msb-navy to-[#0f2d5c]">
+        <div
+          className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-sky-400/20 blur-3xl"
+          aria-hidden
+        />
+        <div
+          className="pointer-events-none absolute right-10 bottom-0 h-56 w-56 rounded-full bg-msb-orange/10 blur-3xl"
+          aria-hidden
+        />
+        <div
+          className="pointer-events-none absolute right-0 top-1/2 hidden -translate-y-1/2 md:block"
+          aria-hidden
+        >
+          <svg width="260" height="140" viewBox="0 0 260 140" fill="none">
+            <path
+              d="M0 90C50 40 90 130 140 70C180 22 220 60 260 10"
+              stroke="white"
+              strokeOpacity="0.12"
+              strokeWidth="2"
+            />
+            <path
+              d="M0 120C60 80 100 150 150 100C190 60 230 90 260 50"
+              stroke="#F4600C"
+              strokeOpacity="0.18"
+              strokeWidth="2"
+            />
+          </svg>
+        </div>
+
+        <div className="relative px-6 py-6 md:py-7 max-w-5xl mx-auto">
+          <div className="flex items-center justify-between gap-4 mb-4">
+            <Image
+              src="/msb-logo-white.svg"
+              alt="MSB"
+              width={72}
+              height={18}
+              className="shrink-0"
+              priority
+            />
+            <p className="text-right text-[11px] leading-tight text-white/60 hidden sm:block">
+              Smarter Data
+              <br />
+              Bigger Opportunities
             </p>
-            <p className="text-xs text-white/75 mt-1 max-w-2xl leading-relaxed">
+          </div>
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold tracking-widest text-msb-orange uppercase">
+              Hệ thống quản lý công tác
+            </p>
+            <h1 className="text-xl md:text-2xl font-bold text-white leading-snug mt-1">
+              Trợ lý thẩm định tín dụng
+              <br className="hidden sm:block" /> Toàn diện MSB
+            </h1>
+            <p className="text-xs text-white/70 mt-2 max-w-2xl leading-relaxed">
               Thẩm định Tín dụng KHDN (EB) &amp; KHCN (RB) Hộ kinh doanh · Tự động bóc tách BCTC, tính
               NWC, DSCR, ICR, Cross-sell và xuất Tờ trình chỉ trong vài giây.
             </p>
@@ -56,10 +92,10 @@ export default function Home() {
                 setTab(t);
                 setResult(null);
               }}
-              className={`px-4 py-2 rounded-full font-semibold transition-colors ${
+              className={`px-5 py-2 rounded-full text-sm font-semibold transition-colors ${
                 tab === t
-                  ? "bg-msb-orange text-white shadow"
-                  : "bg-white text-msb-navy hover:bg-msb-bg"
+                  ? "bg-msb-orange text-white shadow-sm"
+                  : "bg-white text-msb-navy border border-gray-100 hover:bg-msb-bg"
               }`}
             >
               {TAB_LABELS[t]}

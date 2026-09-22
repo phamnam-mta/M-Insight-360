@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { History } from "lucide-react";
 import { AssessmentResult, HistoryItem, fetchHistory, loadHistoryItemsLocally } from "@/lib/api";
 
 type Props = {
@@ -79,8 +80,13 @@ export default function HistoryPanel({ agentType, onSelect, refreshKey }: Props)
   }, [agentType, refreshKey]);
 
   return (
-    <div className="bg-white rounded-lg shadow p-6 mt-6">
-      <h2 className="text-lg font-semibold text-msb-navy mb-3">Lịch sử thẩm định gần nhất</h2>
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mt-6">
+      <div className="flex items-center gap-2.5 mb-3">
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-msb-navy/5 text-msb-navy shrink-0">
+          <History className="h-4 w-4" />
+        </span>
+        <h2 className="text-lg font-semibold text-msb-navy">Lịch sử thẩm định gần nhất</h2>
+      </div>
       {loading && items.length === 0 && <p className="text-sm text-gray-500">Đang tải...</p>}
       {error && items.length === 0 && <p className="text-sm text-red-600">{error}</p>}
       {!loading && !error && items.length === 0 && (
@@ -92,14 +98,14 @@ export default function HistoryPanel({ agentType, onSelect, refreshKey }: Props)
             <li key={item.id} className="py-2 flex items-center justify-between gap-3">
               <button
                 onClick={() => onSelect(item.result)}
-                className="text-left flex-1 hover:bg-msb-bg rounded px-2 py-1 -mx-2 transition-colors"
+                className="text-left flex-1 hover:bg-msb-bg rounded-lg px-2 py-1 -mx-2 transition-colors"
               >
                 <p className="text-sm font-medium text-msb-navy">{item.customer_name}</p>
                 <p className="text-xs text-gray-500">
                   MST {item.tax_id} · {formatDate(item.created_at)}
                 </p>
               </button>
-              <span className="text-xs font-semibold px-2 py-1 rounded bg-msb-bg text-msb-navy shrink-0">
+              <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-msb-bg text-msb-navy shrink-0">
                 {statusOf(item)}
               </span>
             </li>

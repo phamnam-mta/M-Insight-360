@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { FileText, Paperclip, Sparkles, User } from "lucide-react";
 import { AssessmentResult, runAssessment } from "@/lib/api";
 
 type Props = {
@@ -54,44 +55,65 @@ export default function AssessmentForm({ agentType, onResult }: Props) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow p-6 space-y-4">
-      <h2 className="text-lg font-semibold text-msb-navy">Thẩm định Khách hàng mới</h2>
+    <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
+      <div className="flex items-center gap-2.5 mb-1">
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-msb-orange/10 text-msb-orange shrink-0">
+          <User className="h-4 w-4" />
+        </span>
+        <h2 className="text-lg font-semibold text-msb-navy">Thẩm định Khách hàng mới</h2>
+      </div>
 
       <div>
         <label className="block text-sm font-medium text-msb-navy mb-1">
           Tên Khách hàng <span className="text-red-600">*</span>
         </label>
-        <input
-          className="w-full border rounded px-3 py-2"
-          value={customerName}
-          onChange={(e) => setCustomerName(e.target.value)}
-          required
-        />
+        <div className="relative">
+          <User className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <input
+            className="w-full border border-gray-200 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-msb-orange/40 focus:border-msb-orange"
+            value={customerName}
+            onChange={(e) => setCustomerName(e.target.value)}
+            required
+          />
+        </div>
       </div>
 
       <div>
         <label className="block text-sm font-medium text-msb-navy mb-1">
           Mã số thuế <span className="text-red-600">*</span>
         </label>
-        <input
-          className="w-full border rounded px-3 py-2"
-          value={taxId}
-          onChange={(e) => setTaxId(e.target.value)}
-          required
-        />
+        <div className="relative">
+          <FileText className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <input
+            className="w-full border border-gray-200 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-msb-orange/40 focus:border-msb-orange"
+            value={taxId}
+            onChange={(e) => setTaxId(e.target.value)}
+            required
+          />
+        </div>
       </div>
 
       <div>
         <label className="block text-sm font-medium text-msb-navy mb-1">
           Upload hồ sơ (docx, pdf, xlsx, csv) <span className="text-red-600">*</span>
         </label>
-        <input
-          type="file"
-          multiple
-          accept=".docx,.pdf,.xlsx,.csv"
-          onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
-          required
-        />
+        <div className="flex items-center gap-3 border border-dashed border-gray-300 rounded-lg px-3 py-2.5 bg-gray-50/60">
+          <Paperclip className="h-4 w-4 text-gray-400 shrink-0" />
+          <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-msb-navy bg-white border border-gray-200 rounded-md px-3 py-1.5 cursor-pointer hover:bg-msb-bg shrink-0">
+            Chọn tệp
+            <input
+              type="file"
+              multiple
+              accept=".docx,.pdf,.xlsx,.csv"
+              onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
+              required
+              className="hidden"
+            />
+          </label>
+          <span className="text-xs text-gray-500 truncate">
+            {files.length > 0 ? `${files.length} tệp đã chọn` : "Chưa chọn tệp nào"}
+          </span>
+        </div>
       </div>
 
       {agentType === "crosssell" && (
@@ -146,8 +168,9 @@ export default function AssessmentForm({ agentType, onResult }: Props) {
       <button
         type="submit"
         disabled={!canSubmit || loading}
-        className="bg-msb-orange text-white font-semibold px-4 py-2 rounded disabled:opacity-50"
+        className="w-full inline-flex items-center justify-center gap-2 bg-gradient-to-r from-msb-orange to-orange-500 text-white font-semibold px-4 py-2.5 rounded-lg shadow-sm hover:brightness-105 transition disabled:opacity-50 disabled:cursor-not-allowed"
       >
+        <Sparkles className="h-4 w-4" />
         {loading ? "Đang xử lý..." : "Chạy thẩm định AI"}
       </button>
     </form>

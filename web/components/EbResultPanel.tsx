@@ -2,6 +2,22 @@
 
 import { useState } from "react";
 import {
+  AlertTriangle,
+  Badge as BadgeIcon,
+  Brain,
+  Building2,
+  Clock,
+  ClipboardList,
+  File,
+  FileDown,
+  FileSpreadsheet,
+  FileText,
+  FolderOpen,
+  Handshake,
+  SlidersHorizontal,
+  TrendingUp,
+} from "lucide-react";
+import {
   ACTIVATED_STATUS,
   AssessmentResult,
   ConditionRow,
@@ -14,6 +30,40 @@ import {
   runStressTest,
 } from "@/lib/api";
 
+function SectionHeader({
+  icon: Icon,
+  title,
+  subtitle,
+  right,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  subtitle?: string;
+  right?: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <div className="flex items-center gap-2.5">
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-msb-navy/5 text-msb-navy shrink-0">
+          <Icon className="h-4 w-4" />
+        </span>
+        <div>
+          <h2 className="text-lg font-semibold text-msb-navy leading-tight">{title}</h2>
+          {subtitle && <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>}
+        </div>
+      </div>
+      {right}
+    </div>
+  );
+}
+
+function fileIconFor(filename: string) {
+  const ext = filename.split(".").pop()?.toLowerCase();
+  if (ext === "csv" || ext === "xlsx") return FileSpreadsheet;
+  if (ext === "pdf" || ext === "docx") return FileText;
+  return File;
+}
+
 const RESULT_LABEL: Record<string, string> = {
   PASS: "Đạt",
   FAIL: "Không đạt",
@@ -25,14 +75,18 @@ const RESULT_LABEL: Record<string, string> = {
 const RESULT_STYLE: Record<string, string> = {
   PASS: "bg-green-100 text-green-800",
   FAIL: "bg-red-100 text-red-800",
-  INSUFFICIENT_DATA: "bg-gray-100 text-gray-700",
+  INSUFFICIENT_DATA: "bg-gray-100 text-gray-600",
   PENDING_INTERNAL_CHECK: "bg-amber-100 text-amber-800",
   NOT_APPLICABLE: "bg-gray-100 text-gray-500",
 };
 
 function ResultBadge({ result }: { result: string }) {
   return (
-    <span className={`text-xs font-semibold px-2 py-1 rounded ${RESULT_STYLE[result] ?? "bg-gray-100"}`}>
+    <span
+      className={`inline-block text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap ${
+        RESULT_STYLE[result] ?? "bg-gray-100 text-gray-600"
+      }`}
+    >
       {RESULT_LABEL[result] ?? result}
     </span>
   );
@@ -76,27 +130,27 @@ function EvidenceCell({ row, caseId }: { row: ConditionRow; caseId?: string }) {
 
 function OverviewTable({ rows, caseId }: { rows: ConditionRow[]; caseId?: string }) {
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto rounded-lg border border-gray-100">
       <table className="w-full text-sm border-collapse">
         <thead>
-          <tr className="text-left border-b bg-msb-bg">
-            <th className="py-2 px-2">Tên điều kiện</th>
-            <th className="py-2 px-2">Giá trị/hiện trạng thực tế</th>
-            <th className="py-2 px-2">Điều kiện đối chiếu</th>
-            <th className="py-2 px-2">Kết quả</th>
-            <th className="py-2 px-2">Nguồn chứng cứ và ngày dữ liệu</th>
-            <th className="py-2 px-2">Lý do/chứng từ còn thiếu</th>
+          <tr className="text-left bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+            <th className="py-2.5 px-3 font-semibold">Tên điều kiện</th>
+            <th className="py-2.5 px-3 font-semibold">Giá trị/hiện trạng thực tế</th>
+            <th className="py-2.5 px-3 font-semibold">Điều kiện đối chiếu</th>
+            <th className="py-2.5 px-3 font-semibold">Kết quả</th>
+            <th className="py-2.5 px-3 font-semibold">Nguồn chứng cứ và ngày dữ liệu</th>
+            <th className="py-2.5 px-3 font-semibold">Lý do/chứng từ còn thiếu</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((row) => (
-            <tr key={row.condition_id} className="border-b align-top">
-              <td className="py-2 px-2 font-medium">{row.condition_name}</td>
-              <td className="py-2 px-2">{formatObservedValue(row)}</td>
-              <td className="py-2 px-2 text-gray-600">{row.compare_rule}</td>
-              <td className="py-2 px-2"><ResultBadge result={row.result} /></td>
-              <td className="py-2 px-2"><EvidenceCell row={row} caseId={caseId} /></td>
-              <td className="py-2 px-2 text-gray-600">{row.reason_if_incomplete ?? "—"}</td>
+            <tr key={row.condition_id} className="border-t border-gray-100 align-top hover:bg-gray-50/60">
+              <td className="py-2.5 px-3 font-medium text-msb-navy">{row.condition_name}</td>
+              <td className="py-2.5 px-3">{formatObservedValue(row)}</td>
+              <td className="py-2.5 px-3 text-gray-600">{row.compare_rule}</td>
+              <td className="py-2.5 px-3"><ResultBadge result={row.result} /></td>
+              <td className="py-2.5 px-3"><EvidenceCell row={row} caseId={caseId} /></td>
+              <td className="py-2.5 px-3 text-gray-600">{row.reason_if_incomplete ?? "—"}</td>
             </tr>
           ))}
         </tbody>
@@ -126,9 +180,9 @@ function MetricCard({ metricKey, metric }: { metricKey: string; metric: MetricVa
   const meta = METRIC_LABELS[metricKey] ?? { label: metricKey, unit: "" };
   const hasValue = metric.status === "OK" && metric.value !== null;
   return (
-    <div className="bg-white rounded-lg shadow p-4">
-      <h3 className="text-sm font-medium text-gray-500">{meta.label}</h3>
-      <p className="text-2xl font-bold text-msb-navy">
+    <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-4">
+      <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wide">{meta.label}</h3>
+      <p className={`text-2xl font-bold mt-1 ${hasValue ? "text-msb-navy" : "text-gray-400"}`}>
         {hasValue ? `${metric.value} ${meta.unit}` : "Chưa có dữ liệu"}
       </p>
       {metricKey === "output_contract_financing_ratio" && (
@@ -160,8 +214,8 @@ function RiskFlagsSection({ flags }: { flags: RiskFlag[] }) {
   const [showCleared, setShowCleared] = useState(false);
 
   return (
-    <div className="bg-white rounded-lg shadow p-6 space-y-3">
-      <h2 className="text-lg font-semibold text-msb-navy">C. Cảnh báo rủi ro ({activated.length})</h2>
+    <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6 space-y-3">
+      <SectionHeader icon={AlertTriangle} title={`C. Cảnh báo rủi ro (${activated.length})`} />
       {activated.length > 0 ? (
         <ul className="text-sm space-y-2">
           {activated.map((f, i) => (
@@ -213,24 +267,43 @@ const DOC_STATUS_LABEL: Record<string, string> = {
   "ĐÃ_TẢI_LÊN": "Đã tải lên",
 };
 
+const DOC_STATUS_STYLE: Record<string, string> = {
+  "KHÔNG_ĐỌC_ĐƯỢC": "bg-red-100 text-red-700",
+  "ĐÃ_TRÍCH_XUẤT": "bg-green-100 text-green-800",
+  "CHỜ_XÁC_MINH": "bg-amber-100 text-amber-800",
+  "ĐÃ_TẢI_LÊN": "bg-gray-100 text-gray-600",
+};
+
 function DocumentPanel({ documents }: { documents: DocumentStatus[] }) {
   if (documents.length === 0) return null;
   return (
-    <div className="bg-white rounded-lg shadow p-6 space-y-2">
-      <h2 className="text-lg font-semibold text-msb-navy">D. Hồ sơ khách hàng</h2>
+    <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6 space-y-2">
+      <SectionHeader icon={FolderOpen} title="D. Hồ sơ khách hàng" />
       <ul className="text-sm divide-y">
-        {documents.map((d, i) => (
-          <li key={i} className="py-2 flex justify-between items-center">
-            <div>
-              <p className="font-medium">{d.filename}</p>
-              <p className="text-xs text-gray-500">{d.doc_type ?? "—"} · {d.cited_field_count} trường đã trích xuất</p>
-              {d.warnings.length > 0 && <p className="text-xs text-red-600">{d.warnings.join("; ")}</p>}
-            </div>
-            <span className="text-xs font-semibold px-2 py-1 rounded bg-gray-100">
-              {DOC_STATUS_LABEL[d.status] ?? d.status}
-            </span>
-          </li>
-        ))}
+        {documents.map((d, i) => {
+          const FileIcon = fileIconFor(d.filename);
+          return (
+            <li key={i} className="py-2.5 flex justify-between items-center gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-msb-bg text-msb-navy shrink-0">
+                  <FileIcon className="h-4 w-4" />
+                </span>
+                <div className="min-w-0">
+                  <p className="font-medium truncate">{d.filename}</p>
+                  <p className="text-xs text-gray-500">{d.doc_type ?? "—"} · {d.cited_field_count} trường đã trích xuất</p>
+                  {d.warnings.length > 0 && <p className="text-xs text-red-600">{d.warnings.join("; ")}</p>}
+                </div>
+              </div>
+              <span
+                className={`text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap shrink-0 ${
+                  DOC_STATUS_STYLE[d.status] ?? "bg-gray-100 text-gray-600"
+                }`}
+              >
+                {DOC_STATUS_LABEL[d.status] ?? d.status}
+              </span>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
@@ -239,15 +312,18 @@ function DocumentPanel({ documents }: { documents: DocumentStatus[] }) {
 function CrossSellSection({ opportunities }: { opportunities: OpportunityCard[] }) {
   if (opportunities.length === 0) {
     return (
-      <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-lg font-semibold text-msb-navy mb-2">E. Cơ hội bán chéo</h2>
-        <p className="text-sm text-gray-500">Chưa phát hiện dấu hiệu nhu cầu rõ ràng từ chứng từ hiện có.</p>
+      <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6">
+        <SectionHeader
+          icon={Handshake}
+          title="E. Cơ hội bán chéo"
+          subtitle="Chưa phát hiện dấu hiệu nhu cầu rõ ràng từ chứng từ hiện có."
+        />
       </div>
     );
   }
   return (
-    <div className="bg-white rounded-lg shadow p-6 space-y-3">
-      <h2 className="text-lg font-semibold text-msb-navy">E. Cơ hội bán chéo</h2>
+    <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6 space-y-3">
+      <SectionHeader icon={Handshake} title="E. Cơ hội bán chéo" />
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {opportunities.map((o, i) => (
           <div key={i} className="border rounded p-3 text-sm space-y-1">
@@ -273,8 +349,19 @@ function CrossSellSection({ opportunities }: { opportunities: OpportunityCard[] 
 function AiInsightSection({ why, creditMemo }: { why: string[]; creditMemo?: string }) {
   const [showDeepAnalysis, setShowDeepAnalysis] = useState(false);
   return (
-    <div className="bg-white rounded-lg shadow p-6 space-y-3">
-      <h2 className="text-lg font-semibold text-msb-navy">F. AI Insight</h2>
+    <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6 space-y-3">
+      <SectionHeader
+        icon={Brain}
+        title="F. AI Insight"
+        right={
+          <button
+            className="text-xs font-semibold text-msb-navy underline shrink-0"
+            onClick={() => setShowDeepAnalysis((v) => !v)}
+          >
+            {showDeepAnalysis ? "Ẩn phân tích sâu" : "Phân tích sâu"}
+          </button>
+        }
+      />
       {why.length > 0 ? (
         <ul className="text-sm space-y-2 list-disc list-inside">
           {why.map((w, i) => <li key={i}>{w}</li>)}
@@ -282,9 +369,6 @@ function AiInsightSection({ why, creditMemo }: { why: string[]; creditMemo?: str
       ) : (
         <p className="text-sm text-gray-500">Chưa có nhận định AI (có thể do vượt ngân sách thời gian xử lý).</p>
       )}
-      <button className="text-xs text-msb-navy underline" onClick={() => setShowDeepAnalysis((v) => !v)}>
-        {showDeepAnalysis ? "Ẩn phân tích sâu" : "Phân tích sâu"}
-      </button>
       {showDeepAnalysis && (
         <p className="text-sm text-gray-600 border-t pt-2">
           {creditMemo || "Chỉ có 1 kỳ dữ liệu hoặc chưa đủ dữ liệu — chưa đủ để phân tích xu hướng."}
@@ -325,26 +409,36 @@ function StressTestPanel({ creditEngine }: { creditEngine?: Record<string, Metri
   }
 
   return (
-    <div className="bg-white rounded-lg shadow p-6 space-y-3">
-      <h2 className="text-lg font-semibold text-msb-navy">Stress Test (kịch bản giả định)</h2>
-      <p className="text-xs text-gray-500">
-        Đây là kịch bản giả định do cán bộ nhập, không phải dự báo tài chính chắc chắn.
-      </p>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {(Object.keys(deltas) as Array<keyof StressTestState>).map((key) => (
-          <div key={key}>
-            <label className="block text-xs text-gray-500 mb-1">{key} (%)</label>
-            <input
-              type="number" className="w-full border rounded px-2 py-1 text-sm"
-              value={deltas[key]}
-              onChange={(e) => setDeltas((prev) => ({ ...prev, [key]: Number(e.target.value) }))}
-            />
-          </div>
-        ))}
+    <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6 space-y-3">
+      <SectionHeader
+        icon={SlidersHorizontal}
+        title="Stress Test (kịch bản giả định)"
+        subtitle="Đây là kịch bản giả định do cán bộ nhập, không phải dự báo tài chính chắc chắn."
+      />
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 flex-1">
+          {(Object.keys(deltas) as Array<keyof StressTestState>).map((key) => (
+            <div key={key}>
+              <label className="block text-xs text-gray-500 mb-1">{key} (%)</label>
+              <div className="relative">
+                <input
+                  type="number"
+                  className="w-full border border-gray-200 rounded-lg px-2 py-1.5 pr-6 text-sm focus:outline-none focus:ring-2 focus:ring-msb-orange/40 focus:border-msb-orange"
+                  value={deltas[key]}
+                  onChange={(e) => setDeltas((prev) => ({ ...prev, [key]: Number(e.target.value) }))}
+                />
+                <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-400">%</span>
+              </div>
+            </div>
+          ))}
+        </div>
+        <button
+          onClick={handleRun}
+          className="bg-msb-navy text-white text-sm font-semibold px-4 py-2 rounded-lg shrink-0 hover:brightness-110 transition"
+        >
+          Chạy kịch bản
+        </button>
       </div>
-      <button onClick={handleRun} className="bg-msb-navy text-white text-sm font-semibold px-3 py-1.5 rounded">
-        Chạy kịch bản
-      </button>
       {error && <p className="text-sm text-red-600">{error}</p>}
       {result && (
         <div className="text-sm grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t">
@@ -364,36 +458,53 @@ export default function EbResultPanel({ result }: { result: AssessmentResult }) 
   const overview = result.overview ?? [];
   const summary = result.overview_summary;
 
+  const infoItems: Array<{ icon: React.ComponentType<{ className?: string }>; label: string; value: string }> = [
+    { icon: BadgeIcon, label: "Mã hồ sơ", value: result.case_id ?? "—" },
+    { icon: Building2, label: "Khách hàng", value: (result.customer_profile?.customer_name as string) ?? "—" },
+    { icon: FileText, label: "MST", value: (result.customer_profile?.tax_id as string) ?? "—" },
+    { icon: Clock, label: "Thời điểm chạy", value: result.assessed_at ?? "—" },
+  ];
+
   return (
     <div className="space-y-6 mt-6">
-      <div className="bg-white rounded-lg shadow p-6 space-y-2">
-        <div className="flex flex-wrap gap-6 text-sm">
-          <div><span className="text-gray-500">Mã hồ sơ</span><p className="font-semibold">{result.case_id ?? "—"}</p></div>
-          <div><span className="text-gray-500">Khách hàng</span><p className="font-semibold">{(result.customer_profile?.customer_name as string) ?? "—"}</p></div>
-          <div><span className="text-gray-500">MST</span><p className="font-semibold">{(result.customer_profile?.tax_id as string) ?? "—"}</p></div>
-          <div><span className="text-gray-500">Thời điểm chạy</span><p className="font-semibold">{result.assessed_at ?? "—"}</p></div>
+      <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6 space-y-3">
+        <div className="flex flex-wrap gap-x-8 gap-y-3 text-sm">
+          {infoItems.map(({ icon: Icon, label, value }) => (
+            <div key={label} className="flex items-center gap-2.5">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-msb-bg text-msb-navy shrink-0">
+                <Icon className="h-4 w-4" />
+              </span>
+              <div>
+                <span className="text-gray-500 text-xs">{label}</span>
+                <p className="font-semibold text-msb-navy">{value}</p>
+              </div>
+            </div>
+          ))}
         </div>
         {result.overall_conclusion && (
-          <div className="bg-amber-50 border border-amber-300 rounded p-3 text-sm font-semibold text-amber-900">
+          <div className="flex items-start gap-2 bg-amber-50 border border-amber-300 rounded-lg p-3 text-sm font-semibold text-amber-900">
+            <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
             {result.overall_conclusion}
           </div>
         )}
       </div>
 
-      <div className="bg-white rounded-lg shadow p-6 space-y-3">
-        <h2 className="text-lg font-semibold text-msb-navy">A. Thông tin tổng quan</h2>
-        {summary && (
-          <p className="text-sm text-gray-600">
-            {summary.checked}/{summary.total} điều kiện đã kiểm tra đủ dữ liệu; {summary.passed} đạt,{" "}
-            {summary.failed} không đạt, {summary.pending} chờ xác minh.
-          </p>
-        )}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6 space-y-3">
+        <SectionHeader
+          icon={ClipboardList}
+          title="A. Thông tin tổng quan"
+          subtitle={
+            summary
+              ? `${summary.checked}/${summary.total} điều kiện đã kiểm tra đủ dữ liệu; ${summary.passed} đạt, ${summary.failed} không đạt, ${summary.pending} chờ xác minh.`
+              : undefined
+          }
+        />
         <OverviewTable rows={overview} caseId={result.case_id} />
       </div>
 
       {result.credit_engine && (
-        <div className="bg-white rounded-lg shadow p-6 space-y-3">
-          <h2 className="text-lg font-semibold text-msb-navy">B.1 Bốn thẻ chỉ tiêu</h2>
+        <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6 space-y-3">
+          <SectionHeader icon={TrendingUp} title="B.1 Bốn thẻ chỉ tiêu" />
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {Object.entries(result.credit_engine)
               .filter(([key]) => key in METRIC_LABELS)
@@ -411,7 +522,7 @@ export default function EbResultPanel({ result }: { result: AssessmentResult }) 
       <StressTestPanel creditEngine={result.credit_engine as Record<string, MetricValue> | undefined} />
 
       {result.export_available && (
-        <div className="bg-white rounded-lg shadow p-6">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6">
           <button
             onClick={async () => {
               try {
@@ -426,8 +537,9 @@ export default function EbResultPanel({ result }: { result: AssessmentResult }) 
                 alert(err instanceof Error ? err.message : "Xuất tờ trình thất bại.");
               }
             }}
-            className="border border-msb-navy text-msb-navy font-semibold px-4 py-2 rounded"
+            className="inline-flex items-center gap-2 border border-msb-navy text-msb-navy font-semibold px-4 py-2 rounded-lg hover:bg-msb-bg transition"
           >
+            <FileDown className="h-4 w-4" />
             Soạn tờ trình MB02a
           </button>
         </div>
