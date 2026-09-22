@@ -147,3 +147,20 @@ def test_extract_document_caps_ocr_pages_and_warns_instead_of_processing_unbound
     doc = pipeline.extract_document(str(fixtures_dir / "sample_scanned_35page.pdf"), "sample_scanned_35page.pdf")
     assert len(calls) == pipeline.MAX_OCR_PAGES
     assert any("gioi han" in w.lower() or "giới hạn" in w for w in doc.warnings)
+
+
+def test_extract_document_carries_file_id_through(fixtures_dir):
+    doc = pipeline.extract_document(str(fixtures_dir / "sample_text.pdf"), "sample_text.pdf", file_id="abc123")
+    assert doc.file_id == "abc123"
+
+
+def test_extract_document_pdf_keeps_per_page_text(fixtures_dir):
+    doc = pipeline.extract_document(str(fixtures_dir / "sample_text.pdf"), "sample_text.pdf")
+    assert doc.pages is not None
+    assert len(doc.pages) >= 1
+    assert "".join(doc.pages).strip() != ""
+
+
+def test_extract_document_xlsx_has_no_pages_field_populated(fixtures_dir):
+    doc = pipeline.extract_document(str(fixtures_dir / "sample.xlsx"), "sample.xlsx")
+    assert doc.pages is None

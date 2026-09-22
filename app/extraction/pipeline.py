@@ -25,18 +25,21 @@ MAX_OCR_CONCURRENCY = 12
 MAX_OCR_PAGES = 30
 
 
-def extract_document(file_path: str, filename: str) -> ExtractedDocument:
+def extract_document(file_path: str, filename: str, file_id: str = "") -> ExtractedDocument:
     ext = os.path.splitext(filename)[1].lower()
     if ext not in SUPPORTED_EXTENSIONS:
         raise ValueError(f"Định dạng file không được hỗ trợ: {ext}")
 
     if ext == ".pdf":
-        return _extract_pdf_document(file_path, filename)
-    if ext == ".docx":
-        return extract_docx(file_path, filename)
-    if ext == ".xlsx":
-        return extract_xlsx(file_path, filename)
-    return extract_csv(file_path, filename)  # ext == ".csv"
+        doc = _extract_pdf_document(file_path, filename)
+    elif ext == ".docx":
+        doc = extract_docx(file_path, filename)
+    elif ext == ".xlsx":
+        doc = extract_xlsx(file_path, filename)
+    else:
+        doc = extract_csv(file_path, filename)  # ext == ".csv"
+    doc.file_id = file_id
+    return doc
 
 
 def _extract_pdf_document(file_path: str, filename: str) -> ExtractedDocument:
@@ -54,6 +57,7 @@ def _extract_pdf_document(file_path: str, filename: str) -> ExtractedDocument:
             extraction_method="text_layer",
             confidence=1.0,
             warnings=[],
+            pages=page_texts,
         )
 
     warnings: list[str] = []
@@ -106,6 +110,7 @@ def _extract_pdf_document(file_path: str, filename: str) -> ExtractedDocument:
         extraction_method=method,
         confidence=confidence,
         warnings=warnings,
+        pages=final_texts,
     )
 
 

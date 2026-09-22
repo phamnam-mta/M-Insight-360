@@ -16,3 +16,5 @@ class ExtractedDocument:
     extraction_method: str  # "text_layer" | "docx" | "spreadsheet" | "vision_llm" | "no_text_layer" | "ocr_failed"
     confidence: float  # 0.0-1.0
     warnings: list[str] = field(default_factory=list)
+    file_id: str = ""
+    pages: list[str] | None = None
