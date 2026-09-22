@@ -19,6 +19,28 @@ def save_assessment(
         conn.close()
 
 
+def list_recent_assessments(db_path: str, agent_type: str, limit: int = 5) -> list[dict]:
+    conn = get_connection(db_path)
+    try:
+        rows = conn.execute(
+            "SELECT * FROM assessments WHERE agent_type = ? ORDER BY id DESC LIMIT ?",
+            (agent_type, limit),
+        ).fetchall()
+        return [
+            {
+                "id": row["id"],
+                "agent_type": row["agent_type"],
+                "customer_name": row["customer_name"],
+                "tax_id": row["tax_id"],
+                "result": json.loads(row["result_json"]),
+                "created_at": row["created_at"],
+            }
+            for row in rows
+        ]
+    finally:
+        conn.close()
+
+
 def get_latest_assessment(db_path: str, agent_type: str) -> dict | None:
     conn = get_connection(db_path)
     try:
