@@ -11,7 +11,7 @@ function formatVnd(v: number | null): string {
 
 export function CapitalBalanceDiagram({ check }: { check?: CapitalBalanceCheck }) {
   if (!check) return null;
-  const balanced = check.trang_thai === "Can bang";
+  const balanced = check.trang_thai === "Cân bằng";
   return (
     <div className="bg-white rounded-xl border border-gray-100 p-5 space-y-3">
       <SectionHeader icon={Scale} title="Cân đối tài chính" />

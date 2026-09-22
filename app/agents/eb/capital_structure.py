@@ -59,7 +59,7 @@ def compute_total_borrowings(inputs: EbFinancialInputs, field_evidence: dict | N
 def compute_capital_balance_check(inputs: EbFinancialInputs, nwc: Metric, long_term_capital: Metric) -> dict:
     if nwc.status == "NEED_MORE_DATA" or long_term_capital.status == "NEED_MORE_DATA" or inputs.non_current_assets_vnd is None:
         return {
-            "trai": None, "phai": None, "trang_thai": "Chua xac dinh tu ho so tai len",
+            "trai": None, "phai": None, "trang_thai": "Chưa xác định từ hồ sơ tải lên",
             "nhan_xet": "Thiếu tài sản ngắn/dài hạn, nợ ngắn/dài hạn hoặc vốn chủ sở hữu để đối chiếu cân đối tài chính.",
         }
     trai = nwc.value
@@ -67,7 +67,7 @@ def compute_capital_balance_check(inputs: EbFinancialInputs, nwc: Metric, long_t
     balanced = abs(trai - phai) <= _BALANCE_TOLERANCE_VND
     return {
         "trai": trai, "phai": phai,
-        "trang_thai": "Can bang" if balanced else "Can ra soat phan loai nguon von",
+        "trang_thai": "Cân bằng" if balanced else "Cần rà soát phân loại nguồn vốn",
         "nhan_xet": (
             "Tài sản dài hạn nên được tài trợ bằng nguồn vốn dài hạn; mất cân đối là tín hiệu rủi ro kỳ hạn."
         ),

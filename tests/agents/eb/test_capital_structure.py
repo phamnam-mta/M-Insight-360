@@ -45,7 +45,7 @@ def test_capital_balance_check_balanced():
     check = compute_capital_balance_check(inputs, nwc, long_term_capital)
     assert check["trai"] == 200_000_000
     assert check["phai"] == 200_000_000
-    assert check["trang_thai"] == "Can bang"
+    assert check["trang_thai"] == "Cân bằng"
 
 
 def test_capital_balance_check_mismatched():
@@ -56,9 +56,9 @@ def test_capital_balance_check_mismatched():
     nwc = compute_nwc(inputs)
     long_term_capital = compute_long_term_capital(inputs)
     check = compute_capital_balance_check(inputs, nwc, long_term_capital)
-    assert check["trang_thai"] == "Can ra soat phan loai nguon von"
+    assert check["trang_thai"] == "Cần rà soát phân loại nguồn vốn"
 
 
 def test_capital_balance_check_need_more_data():
     check = compute_capital_balance_check(EbFinancialInputs(), compute_nwc(EbFinancialInputs()), compute_long_term_capital(EbFinancialInputs()))
-    assert check["trang_thai"] == "Chua xac dinh tu ho so tai len"
+    assert check["trang_thai"] == "Chưa xác định từ hồ sơ tải lên"
