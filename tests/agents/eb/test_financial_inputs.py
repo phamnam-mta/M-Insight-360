@@ -112,3 +112,38 @@ def test_same_value_confirmed_in_two_files_stays_computed():
     assert inputs.equity_vnd == 500_000_000
     assert evidence["equity_vnd"].status == "COMPUTED"
     assert len(evidence["equity_vnd"].evidence) == 2
+
+
+def test_new_fields_exist_on_dataclass():
+    from app.agents.eb.financial_inputs import EbFinancialInputs
+
+    inputs = EbFinancialInputs()
+    for f in (
+        "net_revenue_vnd", "pbt_vnd", "pat_vnd", "depreciation_vnd",
+        "non_current_assets_vnd", "long_term_debt_vnd", "finance_lease_debt_vnd",
+        "receivables_vnd", "inventory_vnd", "payables_vnd", "cash_vnd",
+        "total_principal_due_vnd",
+    ):
+        assert hasattr(inputs, f)
+        assert getattr(inputs, f) is None
+
+
+def test_new_field_patterns_match_expected_labels():
+    from app.agents.eb.financial_inputs import _FIELD_PATTERNS
+
+    cases = {
+        "net_revenue_vnd": "doanh thu thuan: 100.000.000",
+        "pbt_vnd": "loi nhuan truoc thue: 50.000.000",
+        "pat_vnd": "loi nhuan sau thue: 40.000.000",
+        "depreciation_vnd": "khau hao: 10.000.000",
+        "non_current_assets_vnd": "tai san dai han: 200.000.000",
+        "long_term_debt_vnd": "no dai han: 30.000.000",
+        "finance_lease_debt_vnd": "no thue tai chinh: 5.000.000",
+        "receivables_vnd": "phai thu khach hang: 20.000.000",
+        "inventory_vnd": "hang ton kho: 15.000.000",
+        "payables_vnd": "phai tra nguoi ban: 12.000.000",
+        "cash_vnd": "tien va tuong duong tien: 8.000.000",
+        "total_principal_due_vnd": "no goc den han: 25.000.000",
+    }
+    for field, text in cases.items():
+        assert _FIELD_PATTERNS[field].search(text), f"{field} pattern did not match {text!r}"

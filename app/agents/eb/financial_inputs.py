@@ -24,6 +24,18 @@ class EbFinancialInputs:
     interest_due_vnd: float | None = None
     ebit_vnd: float | None = None
     interest_expense_vnd: float | None = None
+    net_revenue_vnd: float | None = None
+    pbt_vnd: float | None = None
+    pat_vnd: float | None = None
+    depreciation_vnd: float | None = None
+    non_current_assets_vnd: float | None = None
+    long_term_debt_vnd: float | None = None
+    finance_lease_debt_vnd: float | None = None
+    receivables_vnd: float | None = None
+    inventory_vnd: float | None = None
+    payables_vnd: float | None = None
+    cash_vnd: float | None = None
+    total_principal_due_vnd: float | None = None
 
 
 @dataclass
@@ -57,6 +69,18 @@ _FIELD_PATTERNS: dict[str, re.Pattern] = {
     "interest_due_vnd": re.compile(r"lai den han[:\s]*(-?[\d.,]+)"),
     "ebit_vnd": re.compile(r"ebit\)?[:\s]*(-?[\d.,]+)"),
     "interest_expense_vnd": re.compile(r"chi phi lai vay[:\s]*(-?[\d.,]+)"),
+    "net_revenue_vnd": re.compile(r"doanh thu thuan[:\s]*(-?[\d.,]+)"),
+    "pbt_vnd": re.compile(r"loi nhuan truoc thue[:\s]*(-?[\d.,]+)"),
+    "pat_vnd": re.compile(r"loi nhuan sau thue[:\s]*(-?[\d.,]+)"),
+    "depreciation_vnd": re.compile(r"khau hao[:\s]*(-?[\d.,]+)"),
+    "non_current_assets_vnd": re.compile(r"tai san dai han[:\s]*(-?[\d.,]+)"),
+    "long_term_debt_vnd": re.compile(r"no dai han[:\s]*(-?[\d.,]+)"),
+    "finance_lease_debt_vnd": re.compile(r"no thue tai chinh[:\s]*(-?[\d.,]+)"),
+    "receivables_vnd": re.compile(r"phai thu khach hang[:\s]*(-?[\d.,]+)"),
+    "inventory_vnd": re.compile(r"hang ton kho[:\s]*(-?[\d.,]+)"),
+    "payables_vnd": re.compile(r"phai tra nguoi ban[:\s]*(-?[\d.,]+)"),
+    "cash_vnd": re.compile(r"tien va tuong duong tien[:\s]*(-?[\d.,]+)"),
+    "total_principal_due_vnd": re.compile(r"no goc den han[:\s]*(-?[\d.,]+)"),
 }
 
 
