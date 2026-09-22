@@ -56,6 +56,7 @@ class Metric:
     input_sources: dict[str, str]
     status: str = "OK"  # "OK" | "NEED_MORE_DATA"
     evidence: dict[str, list["EvidenceRef"]] = field(default_factory=dict)
+    policy_version: str | None = None
 
     @staticmethod
     def need_more_data(
