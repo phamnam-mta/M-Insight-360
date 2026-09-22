@@ -26,7 +26,7 @@ def test_ocr_image_returns_model_text(monkeypatch):
 
     get_settings.cache_clear()
 
-    transport = _mock_transport("qwen/qwen3.6-flash", "Doanh thu: 500 trieu")
+    transport = _mock_transport("google/gemma-4-31b-it", "Doanh thu: 500 trieu")
     monkeypatch.setattr(ocr_vision, "_client", httpx.Client(transport=transport))
 
     result = ocr_vision.ocr_image(b"\x89PNG\r\n\x1a\nfakepngbytes")
