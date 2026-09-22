@@ -7,7 +7,7 @@ import EbResultPanel from "@/components/EbResultPanel";
 import HistoryPanel from "@/components/HistoryPanel";
 import ResultPanel from "@/components/ResultPanel";
 import CrossSellPanel from "@/components/CrossSellPanel";
-import { AssessmentResult } from "@/lib/api";
+import { AssessmentResult, saveHistoryItemLocally } from "@/lib/api";
 
 const TAB_LABELS: Record<"rb" | "eb" | "crosssell", string> = {
   rb: "RB",
@@ -71,6 +71,12 @@ export default function Home() {
           agentType={tab}
           onResult={(r) => {
             setResult(r);
+            saveHistoryItemLocally(
+              tab,
+              (r.customer_profile?.customer_name as string) ?? "",
+              (r.customer_profile?.tax_id as string) ?? "",
+              r
+            );
             setHistoryRefreshKey((k) => k + 1);
           }}
         />

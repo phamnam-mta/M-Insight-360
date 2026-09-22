@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AssessmentResult, HistoryItem, fetchHistory } from "@/lib/api";
+import { AssessmentResult, HistoryItem, fetchHistory, loadHistoryItemsLocally } from "@/lib/api";
 
 type Props = {
   agentType: "rb" | "eb" | "crosssell";
@@ -35,6 +35,19 @@ function formatDate(iso: string): string {
   }
 }
 
+function mergeHistoryItems(local: HistoryItem[], remote: HistoryItem[]): HistoryItem[] {
+  const seen = new Set<string>();
+  const combined: HistoryItem[] = [];
+  for (const item of [...local, ...remote]) {
+    const key = item.result?.case_id ?? `${item.agent_type}-${item.id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    combined.push(item);
+  }
+  combined.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  return combined.slice(0, 5);
+}
+
 export default function HistoryPanel({ agentType, onSelect, refreshKey }: Props) {
   const [items, setItems] = useState<HistoryItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -42,13 +55,19 @@ export default function HistoryPanel({ agentType, onSelect, refreshKey }: Props)
 
   useEffect(() => {
     let cancelled = false;
+    // localStorage survives a page refresh even if the backend's SQLite
+    // file was wiped by a container restart — show it immediately, before
+    // the (possibly empty) backend response arrives.
+    const local = loadHistoryItemsLocally(agentType);
+    setItems(mergeHistoryItems(local, []));
     setLoading(true);
     setError(null);
     fetchHistory(agentType, 5)
-      .then((data) => {
-        if (!cancelled) setItems(data);
+      .then((remote) => {
+        if (!cancelled) setItems(mergeHistoryItems(local, remote));
       })
       .catch((err) => {
+        // Backend history unavailable — local items (if any) are still shown.
         if (!cancelled) setError(err instanceof Error ? err.message : "Lỗi không xác định");
       })
       .finally(() => {
@@ -62,8 +81,8 @@ export default function HistoryPanel({ agentType, onSelect, refreshKey }: Props)
   return (
     <div className="bg-white rounded-lg shadow p-6 mt-6">
       <h2 className="text-lg font-semibold text-msb-navy mb-3">Lịch sử thẩm định gần nhất</h2>
-      {loading && <p className="text-sm text-gray-500">Đang tải...</p>}
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {loading && items.length === 0 && <p className="text-sm text-gray-500">Đang tải...</p>}
+      {error && items.length === 0 && <p className="text-sm text-red-600">{error}</p>}
       {!loading && !error && items.length === 0 && (
         <p className="text-sm text-gray-500">Chưa có hồ sơ nào được thẩm định.</p>
       )}

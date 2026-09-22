@@ -203,3 +203,52 @@ export async function fetchHistory(
   const body = await resp.json();
   return body.items ?? [];
 }
+
+// The backend keeps assessment history in a local SQLite file inside the
+// runtime container — GreenNode AgentBase Runtime has no persistent-volume
+// flag for this (confirmed against runtime.sh), so a container restart or
+// cold start after idle wipes it and the server-side history goes empty on
+// the next page load. Mirroring every completed assessment into this
+// browser's localStorage gives history that survives an F5 regardless of
+// backend container lifecycle; HistoryPanel merges both sources.
+const LOCAL_HISTORY_KEY_PREFIX = "msb_assessment_history_";
+const LOCAL_HISTORY_MAX_ITEMS = 20;
+
+function localHistoryKey(agentType: "rb" | "eb" | "crosssell"): string {
+  return `${LOCAL_HISTORY_KEY_PREFIX}${agentType}`;
+}
+
+export function saveHistoryItemLocally(
+  agentType: "rb" | "eb" | "crosssell",
+  customerName: string,
+  taxId: string,
+  result: AssessmentResult
+): void {
+  try {
+    const item: HistoryItem = {
+      id: Date.now(),
+      agent_type: agentType,
+      customer_name: customerName,
+      tax_id: taxId,
+      result,
+      created_at: new Date().toISOString(),
+    };
+    const existing = loadHistoryItemsLocally(agentType);
+    const updated = [item, ...existing].slice(0, LOCAL_HISTORY_MAX_ITEMS);
+    localStorage.setItem(localHistoryKey(agentType), JSON.stringify(updated));
+  } catch {
+    // Private browsing, blocked storage, or quota exceeded — history simply
+    // won't survive a refresh in that case; never break the assessment flow.
+  }
+}
+
+export function loadHistoryItemsLocally(agentType: "rb" | "eb" | "crosssell"): HistoryItem[] {
+  try {
+    const raw = localStorage.getItem(localHistoryKey(agentType));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
