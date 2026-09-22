@@ -168,7 +168,11 @@ async def assess(
             "overview_summary": overview_summary,
             "overall_conclusion": overall_conclusion,
             "documents": build_document_status_list(documents, extraction_warnings, overview_rows, metrics_by_name),
-            "opportunities": opportunities,
+            # Named distinctly from Cross-sell's own "opportunities" field
+            # (a differently-shaped RiskFlag[] on /api/crosssell/assess) so
+            # one AssessmentResult type on the frontend never has to union
+            # two incompatible shapes under the same key.
+            "crosssell_opportunities": opportunities,
             "export_available": True,
         }
 

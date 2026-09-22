@@ -314,7 +314,7 @@ def test_assess_endpoint_opportunities_empty_without_statement(monkeypatch, tmp_
     files = {"files": ("bctc.csv", io.BytesIO(b"Von chu so huu: 500.000.000\n"), "text/csv")}
     with TestClient(app) as client:
         resp = client.post("/api/eb/assess", data={"customer_name": "A", "tax_id": "0100000001"}, files=files)
-    assert resp.json()["opportunities"] == []
+    assert resp.json()["crosssell_opportunities"] == []
 
 
 def test_stress_test_endpoint_recomputes_metrics():
