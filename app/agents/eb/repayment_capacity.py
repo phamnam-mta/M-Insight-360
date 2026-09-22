@@ -14,20 +14,33 @@ def _evidence_for(field_evidence: dict | None, *keys: str) -> dict:
     return {k: field_evidence[k].evidence for k in keys if k in field_evidence}
 
 
-def compute_dscr(inputs: EbFinancialInputs, field_evidence: dict | None = None) -> Metric:
-    debt_service = None
-    if inputs.principal_due_vnd is not None and inputs.interest_due_vnd is not None:
-        debt_service = inputs.principal_due_vnd + inputs.interest_due_vnd
+def compute_dscr(
+    inputs: EbFinancialInputs, field_evidence: dict | None = None, comprehensive: bool = False
+) -> Metric:
+    if comprehensive:
+        numerator_fields = ("pat_vnd", "depreciation_vnd", "interest_expense_vnd")
+        principal = inputs.total_principal_due_vnd
+        interest = inputs.interest_expense_vnd
+        formula = "(LNST + khau_hao + tong_chi_phi_lai_vay) / (tong_no_goc_den_han + tong_chi_phi_lai_vay)"
+    else:
+        numerator_fields = ("pat_vnd", "depreciation_vnd", "interest_due_vnd")
+        principal = inputs.principal_due_vnd
+        interest = inputs.interest_due_vnd
+        formula = "(LNST + khau_hao + lai_vay_dai_han) / (no_goc_dai_han_den_han + lai_vay_dai_han)"
 
-    if inputs.cfads_vnd is None or debt_service is None or debt_service <= 0:
-        return Metric.need_more_data("dscr", "CFADS / (goc_den_han + lai_den_han)")
+    if inputs.pat_vnd is None or inputs.depreciation_vnd is None or interest is None or principal is None:
+        return Metric.need_more_data("dscr", formula)
+    debt_service = principal + interest
+    if debt_service <= 0:
+        return Metric.need_more_data("dscr", formula)
 
-    value = round(inputs.cfads_vnd / debt_service, 4)
+    numerator = inputs.pat_vnd + inputs.depreciation_vnd + interest
+    value = round(numerator / debt_service, 4)
     return Metric(
-        metric="dscr", value=value, formula="CFADS / (goc_den_han + lai_den_han)",
-        input_values={"cfads_vnd": inputs.cfads_vnd, "principal_due_vnd": inputs.principal_due_vnd, "interest_due_vnd": inputs.interest_due_vnd},
-        input_sources={"cfads_vnd": "bctc"},
-        evidence=_evidence_for(field_evidence, "cfads_vnd", "principal_due_vnd", "interest_due_vnd"),
+        metric="dscr", value=value, formula=formula,
+        input_values={"pat_vnd": inputs.pat_vnd, "depreciation_vnd": inputs.depreciation_vnd, "interest": interest, "principal": principal},
+        input_sources={"pat_vnd": "bctc", "depreciation_vnd": "bctc"},
+        evidence=_evidence_for(field_evidence, *numerator_fields, "principal_due_vnd", "total_principal_due_vnd"),
     )
 
 

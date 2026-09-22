@@ -19,7 +19,6 @@ class EbFinancialInputs:
     total_liabilities_vnd: float | None = None
     revenue_bctc_vnd: float | None = None
     revenue_dsp_vnd: float | None = None
-    cfads_vnd: float | None = None
     principal_due_vnd: float | None = None
     interest_due_vnd: float | None = None
     ebit_vnd: float | None = None
@@ -64,7 +63,6 @@ _FIELD_PATTERNS: dict[str, re.Pattern] = {
     "total_liabilities_vnd": re.compile(r"tong no phai tra[:\s]*(-?[\d.,]+)"),
     "revenue_bctc_vnd": re.compile(r"doanh thu thuan[:\s]*(-?[\d.,]+)"),
     "revenue_dsp_vnd": re.compile(r"doanh thu (?:digisale|dsp)[:\s]*(-?[\d.,]+)"),
-    "cfads_vnd": re.compile(r"cfads[:\s]*(-?[\d.,]+)"),
     "principal_due_vnd": re.compile(r"goc den han[:\s]*(-?[\d.,]+)"),
     "interest_due_vnd": re.compile(r"lai den han[:\s]*(-?[\d.,]+)"),
     "ebit_vnd": re.compile(r"ebit\)?[:\s]*(-?[\d.,]+)"),
