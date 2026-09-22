@@ -184,6 +184,63 @@ def test_assess_endpoint_flags_unclassified_document_for_manual_review(monkeypat
     assert body["credit_readiness"] == "MANUAL_REVIEW_REQUIRED"
 
 
+def test_assess_endpoint_includes_crosssell_opportunities_key(monkeypatch, tmp_path):
+    # The web/app/page.tsx home page now runs RB assessment and expects
+    # cross-sell suggestions back in the same response (no statement data
+    # here, so the list is simply empty, but the key must always be present).
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+
+    monkeypatch.setattr(
+        rb_router, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""}
+    )
+
+    with TestClient(app) as client:
+        files = {"files": ("note.csv", io.BytesIO(b"col1,col2\nval1,val2\n"), "text/csv")}
+        resp = client.post(
+            "/api/rb/assess",
+            data={"customer_name": "CONG TY TEST", "tax_id": "0319998887"},
+            files=files,
+        )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["crosssell_opportunities"] == []
+    assert body["assessed_at"]
+
+
+def test_assess_endpoint_crosssell_opportunities_detects_signal(monkeypatch, tmp_path):
+    # A bank statement showing repeated large payments to the same partner
+    # should surface a cross-sell opportunity card alongside the RB result.
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+
+    monkeypatch.setattr(
+        rb_router, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""}
+    )
+
+    statement_csv = (
+        "Ngay,So but toan,Ghi No,Ghi Co,Dien giai,Doi tac,TK doi tac,NH doi tac,Loai tien,Nguon\n"
+        "01/01/2026,1,0,600000000,thanh toan hang,Cong ty A,,,VND,\n"
+        "02/01/2026,2,0,600000000,thanh toan hang,Cong ty A,,,VND,\n"
+        "03/01/2026,3,0,600000000,thanh toan hang,Cong ty A,,,VND,\n"
+    ).encode("utf-8")
+
+    with TestClient(app) as client:
+        files = {"files": ("sao_ke.csv", io.BytesIO(statement_csv), "text/csv")}
+        resp = client.post(
+            "/api/rb/assess",
+            data={"customer_name": "CONG TY TEST", "tax_id": "0319998887"},
+            files=files,
+        )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["crosssell_opportunities"], "expected at least one cross-sell opportunity card"
+
+
 def test_assess_endpoint_skips_narrative_when_time_budget_already_exceeded(monkeypatch, tmp_path):
     # GreenNode's gateway has an unconfigurable ~60s hard timeout in front of
     # this container; if OCR already used most of the budget, the narrative

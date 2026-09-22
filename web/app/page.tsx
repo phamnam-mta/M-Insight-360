@@ -16,7 +16,7 @@ const TAB_LABELS: Record<"rb" | "eb" | "crosssell", string> = {
 };
 
 export default function Home() {
-  const [tab, setTab] = useState<"rb" | "eb" | "crosssell">("rb");
+  const [tab, setTab] = useState<"rb" | "eb" | "crosssell">("eb");
   const [result, setResult] = useState<AssessmentResult | null>(null);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
 
@@ -85,9 +85,9 @@ export default function Home() {
 
       <div className="border-b border-gray-200/70" />
 
-      <div className={`mx-auto px-4 py-8 ${tab === "eb" ? "max-w-6xl" : "max-w-3xl"}`}>
+      <div className="mx-auto px-4 py-8 max-w-6xl">
         <div className="flex gap-2 mb-6">
-          {(["rb", "eb", "crosssell"] as const).map((t) => (
+          {(["eb", "rb", "crosssell"] as const).map((t) => (
             <button
               key={t}
               onClick={() => {

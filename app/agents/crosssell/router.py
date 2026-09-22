@@ -1,3 +1,4 @@
+import datetime
 import os
 import tempfile
 import time
@@ -47,6 +48,7 @@ async def assess(
     total_receivable_credit_131_vnd: float | None = Form(default=None),
 ) -> dict:
     request_start = time.monotonic()
+    assessed_at = datetime.datetime.now(datetime.UTC).isoformat()
     with tempfile.TemporaryDirectory() as tmp_dir:
         saved_files: list[tuple[str, str]] = []
         for upload in files:
@@ -99,6 +101,7 @@ async def assess(
 
         computed = {
             "case_id": f"CROSSSELL-{tax_id}",
+            "assessed_at": assessed_at,
             "customer_profile": {"customer_name": customer_name, "tax_id": tax_id},
             "precheck": precheck,
             "name_quality": name_quality,

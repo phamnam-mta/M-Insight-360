@@ -31,13 +31,13 @@ def evaluate_rule1_payroll(transactions: list[Transaction]) -> RuleResult:
     ]
     if not matches:
         return RuleResult(
-            rule_id="RULE1_PAYROLL", rule_name="Tín hiệu trả lương (RB)", status="CHƯA ĐÁNH GIÁ",
+            rule_id="RULE1_PAYROLL", rule_name="Tín hiệu trả lương", status="CHƯA ĐÁNH GIÁ",
             comment="Chưa có giao dịch ghi nợ nào khớp từ khoá lương — không kết luận 'không có lương'.",
             policy_version="DEMO_UAT",
         )
     total = sum(t.debit for t in matches)
     return RuleResult(
-        rule_id="RULE1_PAYROLL", rule_name="Tín hiệu trả lương (RB)", status="KÍCH HOẠT",
+        rule_id="RULE1_PAYROLL", rule_name="Tín hiệu trả lương", status="KÍCH HOẠT",
         evidence=[f"{len(matches)} giao dịch, tổng {total:,.0f} VND"],
         comment="Cơ hội: Tài khoản trả lương Payroll + Thẻ tín dụng CBNV.",
         observed_value=total,

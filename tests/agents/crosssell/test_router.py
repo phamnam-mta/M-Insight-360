@@ -42,6 +42,7 @@ def test_assess_endpoint_runs_precheck_and_rules(monkeypatch, tmp_path):
     rule_ids = {r["rule_id"] for r in body["opportunities"]}
     assert "RULE2_SCF" in rule_ids
     assert body["dashboard"]
+    assert body["assessed_at"]
 
 
 def test_assess_endpoint_wires_rule5d_leak_ratio_end_to_end(monkeypatch, tmp_path):

@@ -47,12 +47,12 @@ def evaluate_rule2_top_partners(transactions: list[Transaction]) -> RuleResult:
     qualifying = [p for p in ranked if p["qualifies"]]
     if not qualifying:
         return RuleResult(
-            rule_id="RULE2_SCF", rule_name="Tài trợ chuỗi / Thanh toán (EB)", status="KHÔNG KÍCH HOẠT",
+            rule_id="RULE2_SCF", rule_name="Tài trợ chuỗi / Thanh toán", status="KHÔNG KÍCH HOẠT",
             policy_version="DEMO_UAT",
         )
     top = qualifying[0]
     return RuleResult(
-        rule_id="RULE2_SCF", rule_name="Tài trợ chuỗi / Thanh toán (EB)", status="KÍCH HOẠT",
+        rule_id="RULE2_SCF", rule_name="Tài trợ chuỗi / Thanh toán", status="KÍCH HOẠT",
         evidence=[
             f"{p['partner']}: {p['transaction_count']} GD, {p['total_value']:,.0f} VND" for p in qualifying[:5]
         ],

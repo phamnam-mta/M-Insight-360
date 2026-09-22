@@ -1,3 +1,4 @@
+import datetime
 import os
 import tempfile
 import time
@@ -5,6 +6,7 @@ from dataclasses import asdict
 
 from fastapi import APIRouter, File, Form, UploadFile
 
+from app.agents.eb.crosssell_adapter import evaluate_crosssell_opportunities
 from app.config import get_settings
 from app.engine.core.timing import narrative_budget_exceeded
 from app.engine.core.types import RuleResult
@@ -39,6 +41,7 @@ async def assess(
     files: list[UploadFile] = File(...),
 ) -> dict:
     request_start = time.monotonic()
+    assessed_at = datetime.datetime.now(datetime.UTC).isoformat()
     with tempfile.TemporaryDirectory() as tmp_dir:
         saved_files: list[tuple[str, str]] = []
         for upload in files:
@@ -93,9 +96,11 @@ async def assess(
             )
 
         credit_readiness, recommendation = determine_readiness(mandatory_check, risk_flags)
+        crosssell_opportunities = evaluate_crosssell_opportunities(documents)
 
         computed = {
             "case_id": f"RB-{tax_id}",
+            "assessed_at": assessed_at,
             "customer_profile": {"customer_name": customer_name, "tax_id": tax_id},
             "document_status": {
                 "legal": [dt for dt, _ in classified if dt in ("LEGAL_IDENTITY", "BUSINESS_REGISTRATION", "TAX_DOCUMENT")],
@@ -113,6 +118,7 @@ async def assess(
             "missing_data": mandatory_check["missing"],
             "credit_readiness": credit_readiness,
             "recommendation": recommendation,
+            "crosssell_opportunities": crosssell_opportunities,
             "export_available": False,
         }
 

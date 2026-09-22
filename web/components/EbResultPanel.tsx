@@ -1,12 +1,8 @@
 "use client";
 
-import { useState } from "react";
 import {
-  AlertTriangle,
   Badge as BadgeIcon,
-  Brain,
   Building2,
-  CheckCircle2,
   Clock,
   ClipboardList,
   File,
@@ -14,49 +10,24 @@ import {
   FileSpreadsheet,
   FileText,
   FolderOpen,
-  Handshake,
   SlidersHorizontal,
   TrendingUp,
 } from "lucide-react";
 import {
-  ACTIVATED_STATUS,
   AssessmentResult,
   ConditionRow,
   DocumentStatus,
-  INSUFFICIENT_DATA_STATUS,
-  OpportunityCard,
-  RiskFlag,
   evidenceFileUrl,
   exportMb02,
   runStressTest,
 } from "@/lib/api";
-
-function SectionHeader({
-  icon: Icon,
-  title,
-  subtitle,
-  right,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  title: string;
-  subtitle?: string;
-  right?: React.ReactNode;
-}) {
-  return (
-    <div className="flex items-start justify-between gap-3">
-      <div className="flex items-center gap-2.5">
-        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-msb-navy/5 text-msb-navy shrink-0">
-          <Icon className="h-4 w-4" />
-        </span>
-        <div>
-          <h2 className="text-lg font-semibold text-msb-navy leading-tight">{title}</h2>
-          {subtitle && <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>}
-        </div>
-      </div>
-      {right}
-    </div>
-  );
-}
+import { AiInsightSection } from "./shared/AiInsightSection";
+import { CrossSellOpportunities } from "./shared/CrossSellOpportunities";
+import { InfoBar, InfoBarItem } from "./shared/InfoBar";
+import { MetricCard, MetricValue } from "./shared/MetricCard";
+import { RiskFlagsSection } from "./shared/RiskFlagsSection";
+import { SectionHeader } from "./shared/SectionHeader";
+import { useState } from "react";
 
 function fileIconFor(filename: string) {
   const ext = filename.split(".").pop()?.toLowerCase();
@@ -160,114 +131,16 @@ function OverviewTable({ rows, caseId }: { rows: ConditionRow[]; caseId?: string
   );
 }
 
-const METRIC_LABELS: Record<string, { label: string; unit: string }> = {
+const METRIC_LABELS: Record<string, { label: string; unit: string; note?: string }> = {
   nwc: { label: "Vốn lưu động ròng (NWC)", unit: "VND" },
   dscr: { label: "Hệ số trả nợ (DSCR)", unit: "lần" },
   icr: { label: "Hệ số bù đắp lãi vay (ICR)", unit: "lần" },
-  output_contract_financing_ratio: { label: "Tỷ lệ tài trợ hợp đồng đầu ra", unit: "%" },
+  output_contract_financing_ratio: {
+    label: "Tỷ lệ tài trợ hợp đồng đầu ra",
+    unit: "%",
+    note: "Tỷ lệ đề xuất, chưa phải mức đã phê duyệt.",
+  },
 };
-
-type MetricValue = {
-  value: number | string | null;
-  formula?: string;
-  input_values?: Record<string, unknown>;
-  input_sources?: Record<string, string>;
-  status?: string;
-  policy_version?: string | null;
-};
-
-function MetricCard({ metricKey, metric }: { metricKey: string; metric: MetricValue }) {
-  const [open, setOpen] = useState(false);
-  const meta = METRIC_LABELS[metricKey] ?? { label: metricKey, unit: "" };
-  const hasValue = metric.status === "OK" && metric.value !== null;
-  return (
-    <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-4">
-      <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wide">{meta.label}</h3>
-      <p className={`text-2xl font-bold mt-1 ${hasValue ? "text-msb-navy" : "text-gray-400"}`}>
-        {hasValue ? `${metric.value} ${meta.unit}` : "Chưa có dữ liệu"}
-      </p>
-      {metricKey === "output_contract_financing_ratio" && (
-        <p className="text-xs text-gray-500 mt-1">Tỷ lệ đề xuất, chưa phải mức đã phê duyệt.</p>
-      )}
-      <button className="text-xs text-msb-navy underline mt-2" onClick={() => setOpen((v) => !v)}>
-        {open ? "Ẩn giải thích" : "Giải thích"}
-      </button>
-      {open && (
-        <div className="mt-2 text-xs text-gray-600 space-y-1 border-t pt-2">
-          <p>Công thức: {metric.formula ?? "—"}</p>
-          {metric.input_values &&
-            Object.entries(metric.input_values).map(([k, v]) => (
-              <p key={k}>
-                {k}: {String(v)} ({metric.input_sources?.[k] ?? "—"})
-              </p>
-            ))}
-          <p>{metric.policy_version ?? "Ngưỡng demo – chờ nghiệp vụ xác nhận"}</p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function RiskFlagsSection({ flags }: { flags: RiskFlag[] }) {
-  const activated = flags.filter((f) => f.status === ACTIVATED_STATUS);
-  const undetermined = flags.filter((f) => f.status === INSUFFICIENT_DATA_STATUS);
-  const cleared = flags.filter((f) => f.status !== ACTIVATED_STATUS && f.status !== INSUFFICIENT_DATA_STATUS);
-  const [showCleared, setShowCleared] = useState(false);
-
-  return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6 space-y-3">
-      <SectionHeader icon={AlertTriangle} title={`C. Cảnh báo rủi ro (${activated.length})`} />
-      {activated.length > 0 ? (
-        <ul className="text-sm space-y-2">
-          {activated.map((f, i) => (
-            <li key={i} className="border-l-4 border-red-400 pl-3">
-              <span className="font-semibold">{f.rule_name ?? f.rule_id}</span> ({f.severity}): {f.impact}
-              {f.evidence_refs && Object.keys(f.evidence_refs).length > 0 && (
-                <ul className="text-xs text-gray-500 mt-1">
-                  {Object.values(f.evidence_refs).flat().map((ev, j) => (
-                    <li key={j}>{ev.filename} — {ev.location}: &quot;{ev.original_text}&quot;</li>
-                  ))}
-                </ul>
-              )}
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <div>
-          <p className="text-sm text-gray-500 mb-2">
-            Không có cảnh báo được kích hoạt trong số các quy tắc đã kiểm tra.
-          </p>
-          <div className="flex items-center gap-2 border border-gray-100 rounded-lg px-3 py-2.5 text-sm text-gray-500 bg-gray-50/60">
-            <CheckCircle2 className="h-4 w-4 text-gray-400 shrink-0" />
-            Chưa có cảnh báo
-          </div>
-        </div>
-      )}
-      {undetermined.length > 0 && (
-        <div className="pt-2 border-t">
-          <h3 className="text-sm font-medium text-gray-500 mb-1">Chưa thể đánh giá</h3>
-          <ul className="text-sm text-gray-500 space-y-1">
-            {undetermined.map((f, i) => (
-              <li key={i}>{f.rule_name ?? f.rule_id}: {f.impact}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-      {cleared.length > 0 && (
-        <div className="pt-2 border-t">
-          <button className="text-xs text-msb-navy underline" onClick={() => setShowCleared((v) => !v)}>
-            {showCleared ? "Ẩn" : "Xem"} {cleared.length} quy tắc không kích hoạt
-          </button>
-          {showCleared && (
-            <ul className="text-xs text-gray-400 mt-1 space-y-1">
-              {cleared.map((f, i) => <li key={i}>{f.rule_name ?? f.rule_id}</li>)}
-            </ul>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
 
 const DOC_STATUS_LABEL: Record<string, string> = {
   "KHÔNG_ĐỌC_ĐƯỢC": "Không đọc được",
@@ -312,75 +185,6 @@ function DocumentPanel({ documents }: { documents: DocumentStatus[] }) {
           );
         })}
       </ul>
-    </div>
-  );
-}
-
-function CrossSellSection({ opportunities }: { opportunities: OpportunityCard[] }) {
-  if (opportunities.length === 0) {
-    return (
-      <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6">
-        <SectionHeader
-          icon={Handshake}
-          title="E. Cơ hội bán chéo"
-          subtitle="Chưa phát hiện dấu hiệu nhu cầu rõ ràng từ chứng từ hiện có."
-        />
-      </div>
-    );
-  }
-  return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6 space-y-3">
-      <SectionHeader icon={Handshake} title="E. Cơ hội bán chéo" />
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {opportunities.map((o, i) => (
-          <div key={i} className="border rounded p-3 text-sm space-y-1">
-            <p className="font-semibold text-msb-navy">{o.product_suggestion}</p>
-            <p className="text-gray-600">{o.formula_note}</p>
-            {o.basis_documents.length > 0 && (
-              <ul className="text-xs text-gray-500 list-disc list-inside">
-                {o.basis_documents.map((b, j) => <li key={j}>{b}</li>)}
-              </ul>
-            )}
-            {o.unverified_conditions && (
-              <p className="text-xs text-amber-700">Chưa xác minh: {o.unverified_conditions}</p>
-            )}
-            <p className="text-xs text-gray-500">Mức ưu tiên: {o.priority} · Người rà soát: {o.reviewer}</p>
-            {o.recommended_action && <p className="text-xs font-medium">{o.recommended_action}</p>}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function AiInsightSection({ why, creditMemo }: { why: string[]; creditMemo?: string }) {
-  const [showDeepAnalysis, setShowDeepAnalysis] = useState(false);
-  return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6 space-y-3">
-      <SectionHeader
-        icon={Brain}
-        title="F. AI Insight"
-        right={
-          <button
-            className="text-xs font-semibold text-msb-navy underline shrink-0"
-            onClick={() => setShowDeepAnalysis((v) => !v)}
-          >
-            {showDeepAnalysis ? "Ẩn phân tích sâu" : "Phân tích sâu"}
-          </button>
-        }
-      />
-      {why.length > 0 ? (
-        <ul className="text-sm space-y-2 list-disc list-inside">
-          {why.map((w, i) => <li key={i}>{w}</li>)}
-        </ul>
-      ) : (
-        <p className="text-sm text-gray-500">Chưa có nhận định AI (có thể do vượt ngân sách thời gian xử lý).</p>
-      )}
-      {showDeepAnalysis && (
-        <p className="text-sm text-gray-600 border-t pt-2">
-          {creditMemo || "Chỉ có 1 kỳ dữ liệu hoặc chưa đủ dữ liệu — chưa đủ để phân tích xu hướng."}
-        </p>
-      )}
     </div>
   );
 }
@@ -465,7 +269,7 @@ export default function EbResultPanel({ result }: { result: AssessmentResult }) 
   const overview = result.overview ?? [];
   const summary = result.overview_summary;
 
-  const infoItems: Array<{ icon: React.ComponentType<{ className?: string }>; label: string; value: string }> = [
+  const infoItems: InfoBarItem[] = [
     { icon: BadgeIcon, label: "Mã hồ sơ", value: result.case_id ?? "—" },
     { icon: Building2, label: "Khách hàng", value: (result.customer_profile?.customer_name as string) ?? "—" },
     { icon: FileText, label: "MST", value: (result.customer_profile?.tax_id as string) ?? "—" },
@@ -474,25 +278,7 @@ export default function EbResultPanel({ result }: { result: AssessmentResult }) 
 
   return (
     <div className="space-y-6 mt-6">
-      <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6 space-y-3">
-        <div className="flex flex-wrap gap-x-8 gap-y-3 text-sm">
-          {infoItems.map(({ icon: Icon, label, value }) => (
-            <div key={label} className="flex items-center gap-2">
-              <Icon className="h-4 w-4 text-gray-400 shrink-0" />
-              <div>
-                <span className="text-gray-500 text-xs">{label}</span>
-                <p className="font-semibold text-msb-navy">{value}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-        {result.overall_conclusion && (
-          <div className="flex items-start gap-2 bg-amber-50 border border-amber-300 rounded-lg p-3 text-sm font-semibold text-amber-900">
-            <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
-            {result.overall_conclusion}
-          </div>
-        )}
-      </div>
+      <InfoBar items={infoItems} banner={result.overall_conclusion} />
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6 space-y-3">
         <SectionHeader
@@ -513,17 +299,29 @@ export default function EbResultPanel({ result }: { result: AssessmentResult }) 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {Object.entries(result.credit_engine)
               .filter(([key]) => key in METRIC_LABELS)
-              .map(([key, metric]) => (
-                <MetricCard key={key} metricKey={key} metric={metric as MetricValue} />
-              ))}
+              .map(([key, metric]) => {
+                const meta = METRIC_LABELS[key];
+                return (
+                  <MetricCard
+                    key={key}
+                    label={meta.label}
+                    unit={meta.unit}
+                    note={meta.note}
+                    metric={metric as MetricValue}
+                  />
+                );
+              })}
           </div>
         </div>
       )}
 
-      <RiskFlagsSection flags={result.risk_flags ?? []} />
+      <RiskFlagsSection flags={result.risk_flags ?? []} title="C. Cảnh báo rủi ro" />
       <DocumentPanel documents={result.documents ?? []} />
-      <CrossSellSection opportunities={result.crosssell_opportunities ?? []} />
-      <AiInsightSection why={result.why ?? []} creditMemo={result.credit_memo} />
+      <CrossSellOpportunities
+        opportunities={result.crosssell_opportunities ?? []}
+        title="E. Cơ hội bán chéo"
+      />
+      <AiInsightSection why={result.why ?? []} creditMemo={result.credit_memo} title="F. AI Insight" />
       <StressTestPanel creditEngine={result.credit_engine as Record<string, MetricValue> | undefined} />
 
       {result.export_available && (

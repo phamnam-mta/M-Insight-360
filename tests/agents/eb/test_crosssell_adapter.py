@@ -44,4 +44,4 @@ def test_activated_rule_becomes_a_card():
         ["03/01/2026", "3", "0", "600000000", "thanh toan hang", "Cong ty A", "", "", "VND", ""],
     ]
     cards = evaluate_crosssell_opportunities([_statement_doc(rows)])
-    assert any(c["product_suggestion"] == "Tài trợ chuỗi / Thanh toán (EB)" for c in cards)
+    assert any(c["product_suggestion"] == "Tài trợ chuỗi / Thanh toán" for c in cards)
