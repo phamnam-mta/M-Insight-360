@@ -5,7 +5,7 @@ from typing import Literal
 
 from app.engine.core.numbers import parse_vn_number
 from app.engine.core.types import EvidenceRef
-from app.extraction.evidence_search import find_all_matches
+from app.extraction.evidence_search import find_all_matches, find_all_matches_by_period
 from app.extraction.types import ExtractedDocument
 
 
@@ -102,3 +102,45 @@ def extract_financial_inputs(
         else:
             evidence[field_name] = FieldEvidence(status="PENDING_REVIEW", evidence=refs)
     return EbFinancialInputs(**values), evidence
+
+
+@dataclass
+class PeriodExtraction:
+    year: str
+    inputs: EbFinancialInputs
+    field_evidence: dict[str, FieldEvidence]
+
+
+def extract_period_aware_financial_inputs(
+    documents: list[ExtractedDocument],
+) -> dict[str, PeriodExtraction]:
+    by_year_values: dict[str, dict[str, float]] = {}
+    by_year_evidence: dict[str, dict[str, FieldEvidence]] = {}
+
+    for field_name, pattern in _FIELD_PATTERNS.items():
+        matches = find_all_matches_by_period(documents, pattern)
+        by_year_raw: dict[str, list[tuple]] = {}
+        for ref, raw, year, _confidence in matches:
+            by_year_raw.setdefault(year, []).append((ref, raw))
+
+        for year, refs_and_raw in by_year_raw.items():
+            values = {round(_to_number(raw), 6) for _, raw in refs_and_raw}
+            refs = [ref for ref, _ in refs_and_raw]
+            year_evidence = by_year_evidence.setdefault(year, {})
+            year_values = by_year_values.setdefault(year, {})
+            if len(values) == 1:
+                year_values[field_name] = _to_number(refs_and_raw[0][1])
+                year_evidence[field_name] = FieldEvidence(status="COMPUTED", evidence=refs)
+            else:
+                year_evidence[field_name] = FieldEvidence(status="PENDING_REVIEW", evidence=refs)
+
+    result: dict[str, PeriodExtraction] = {}
+    for year in by_year_values:
+        for field_name in _FIELD_PATTERNS:
+            by_year_evidence[year].setdefault(field_name, FieldEvidence(status="MISSING_DATA", evidence=[]))
+        result[year] = PeriodExtraction(
+            year=year,
+            inputs=EbFinancialInputs(**by_year_values[year]),
+            field_evidence=by_year_evidence[year],
+        )
+    return result

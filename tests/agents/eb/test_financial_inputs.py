@@ -128,6 +128,35 @@ def test_new_fields_exist_on_dataclass():
         assert getattr(inputs, f) is None
 
 
+def test_extract_period_aware_splits_two_years():
+    from app.agents.eb.financial_inputs import extract_period_aware_financial_inputs
+    from app.extraction.types import ExtractedTable
+
+    table = ExtractedTable(
+        rows=[
+            ["Chi tieu", "31/12/2025", "31/12/2024"],
+            ["Von chu so huu", "500.000.000", "400.000.000"],
+        ],
+        sheet_or_page="BCDKT",
+    )
+    doc = ExtractedDocument(filename="bctc.xlsx", doc_type="xlsx", text="", tables=[table], extraction_method="spreadsheet", confidence=1.0)
+    by_year = extract_period_aware_financial_inputs([doc])
+    assert by_year["2025"].inputs.equity_vnd == 500_000_000
+    assert by_year["2024"].inputs.equity_vnd == 400_000_000
+
+
+def test_extract_period_aware_conflicting_values_same_year_is_pending_review():
+    from app.agents.eb.financial_inputs import extract_period_aware_financial_inputs
+    from app.extraction.types import ExtractedTable
+
+    table1 = ExtractedTable(rows=[["Chi tieu", "31/12/2025"], ["Von chu so huu", "500.000.000"]], sheet_or_page="S1")
+    table2 = ExtractedTable(rows=[["Chi tieu", "31/12/2025"], ["Von chu so huu", "600.000.000"]], sheet_or_page="S2")
+    doc = ExtractedDocument(filename="bctc.xlsx", doc_type="xlsx", text="", tables=[table1, table2], extraction_method="spreadsheet", confidence=1.0)
+    by_year = extract_period_aware_financial_inputs([doc])
+    assert by_year["2025"].field_evidence["equity_vnd"].status == "PENDING_REVIEW"
+    assert by_year["2025"].inputs.equity_vnd is None
+
+
 def test_new_field_patterns_match_expected_labels():
     from app.agents.eb.financial_inputs import _FIELD_PATTERNS
 

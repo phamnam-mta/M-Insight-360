@@ -317,6 +317,59 @@ def test_assess_endpoint_opportunities_empty_without_statement(monkeypatch, tmp_
     assert resp.json()["crosssell_opportunities"] == []
 
 
+def test_assess_endpoint_reports_available_and_selected_period(monkeypatch, tmp_path):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test_period.db"))
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    monkeypatch.setattr(eb_router, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""})
+
+    client = TestClient(app)
+    csv_text = (
+        b"Chi tieu,31/12/2025,31/12/2024\n"
+        b"Von chu so huu,500000000,400000000\n"
+        b"Tai san ngan han,1000000000,900000000\n"
+        b"No ngan han,600000000,550000000\n"
+    )
+    files = {"files": ("bctc.csv", io.BytesIO(csv_text), "text/csv")}
+    resp = client.post(
+        "/api/eb/assess",
+        data={"customer_name": "CONG TY TNHH TEST", "tax_id": "0100000001"},
+        files=files,
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["ho_so_period"]["selected"] == "2025"
+    assert "2024" in body["ho_so_period"]["available"]
+
+
+def test_assess_endpoint_honors_explicit_report_period(monkeypatch, tmp_path):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test_period2.db"))
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    monkeypatch.setattr(eb_router, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""})
+
+    client = TestClient(app)
+    csv_text = (
+        b"Chi tieu,31/12/2025,31/12/2024\n"
+        b"Von chu so huu,500000000,400000000\n"
+    )
+    files = {"files": ("bctc.csv", io.BytesIO(csv_text), "text/csv")}
+    resp = client.post(
+        "/api/eb/assess",
+        data={"customer_name": "CONG TY TNHH TEST", "tax_id": "0100000001", "report_period": "2024"},
+        files=files,
+    )
+    body = resp.json()
+    assert body["ho_so_period"]["selected"] == "2024"
+    # NWC is NEED_MORE_DATA here (no current_assets/current_liabilities rows in
+    # this fixture), so RF01 falls back to reporting equity_vnd directly —
+    # proving the 2024 column (400M), not the 2025 column (500M), was selected.
+    rf01 = next(f for f in body["risk_flags"] if f["rule_id"] == "RF01")
+    assert rf01["observed_value"] == 400_000_000
+
+
 def test_stress_test_endpoint_recomputes_metrics():
     client = TestClient(app)
     resp = client.post("/api/eb/stress-test", json={

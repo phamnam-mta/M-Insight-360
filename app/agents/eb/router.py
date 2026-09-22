@@ -22,7 +22,7 @@ from .crosssell_adapter import evaluate_crosssell_opportunities
 from .document_check import MANDATORY_DOC_TYPES, classify_documents, missing_from_classified
 from .document_status import build_document_status_list
 from .dsp_reconciliation import evaluate_rf04_dsp_mismatch
-from .financial_inputs import extract_financial_inputs
+from .financial_inputs import EbFinancialInputs, extract_period_aware_financial_inputs
 from .leverage import compute_short_term_debt_ratio, evaluate_rf03_short_term_debt_ratio
 from .liquidity import compute_current_ratio, compute_nwc, evaluate_rf01_capital_imbalance
 from .mb02_export import build_mb02_docx
@@ -59,6 +59,7 @@ async def assess(
     proposed_limit_vnd: float | None = Form(default=None),
     eligible_contract_value_vnd: float | None = Form(default=None),
     qd_eb_039_method: str | None = Form(default=None),
+    report_period: str | None = Form(default=None),
 ) -> dict:
     request_start = time.monotonic()
     assessed_at = datetime.datetime.now(datetime.UTC).isoformat()
@@ -97,7 +98,17 @@ async def assess(
         classified = classify_documents(documents)
         missing = missing_from_classified(classified)
 
-        financial_inputs, field_evidence = extract_financial_inputs(documents)
+        period_extractions = extract_period_aware_financial_inputs(documents)
+        available_periods = sorted(period_extractions.keys(), reverse=True)
+        selected_period = (
+            report_period if report_period in period_extractions
+            else (available_periods[0] if available_periods else None)
+        )
+        if selected_period and selected_period in period_extractions:
+            financial_inputs = period_extractions[selected_period].inputs
+            field_evidence = period_extractions[selected_period].field_evidence
+        else:
+            financial_inputs, field_evidence = EbFinancialInputs(), {}
 
         nwc = compute_nwc(financial_inputs, field_evidence)
         current_ratio = compute_current_ratio(financial_inputs, field_evidence)
@@ -174,6 +185,7 @@ async def assess(
             # two incompatible shapes under the same key.
             "crosssell_opportunities": opportunities,
             "export_available": True,
+            "ho_so_period": {"selected": selected_period, "available": available_periods},
         }
 
         # GreenNode's gateway has an unconfigurable hard timeout in front of
