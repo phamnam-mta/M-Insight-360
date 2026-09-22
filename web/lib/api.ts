@@ -5,24 +5,90 @@
 export const ACTIVATED_STATUS = "KÍCH HOẠT";
 export const INSUFFICIENT_DATA_STATUS = "CHƯA ĐÁNH GIÁ";
 
+export type EvidenceRef = {
+  file_id: string;
+  filename: string;
+  location: string;
+  original_text: string;
+  period?: string | null;
+};
+
+export type EvidencedField = {
+  field_id: string;
+  label: string;
+  value: number | string | null;
+  unit?: string | null;
+  period?: string | null;
+  status: "VERIFIED" | "COMPUTED" | "PENDING_REVIEW" | "MISSING_DATA" | "NOT_APPLICABLE";
+  evidence: EvidenceRef[];
+  formula?: string | null;
+  input_fields?: string[];
+  policy_version?: string | null;
+  last_verified_at?: string | null;
+};
+
+export type ConditionRow = {
+  condition_id: string;
+  condition_name: string;
+  observed: EvidencedField;
+  compare_rule: string;
+  result: "PASS" | "FAIL" | "INSUFFICIENT_DATA" | "PENDING_INTERNAL_CHECK" | "NOT_APPLICABLE";
+  reason_if_incomplete?: string | null;
+};
+
+export type OverviewSummary = {
+  checked: number;
+  total: number;
+  passed: number;
+  failed: number;
+  pending: number;
+};
+
+export type DocumentStatus = {
+  filename: string;
+  doc_type?: string;
+  status: "KHÔNG_ĐỌC_ĐƯỢC" | "ĐÃ_TRÍCH_XUẤT" | "CHỜ_XÁC_MINH" | "ĐÃ_TẢI_LÊN";
+  cited_field_count: number;
+  warnings: string[];
+};
+
+export type OpportunityCard = {
+  product_suggestion: string;
+  basis_documents: string[];
+  estimated_value: number | null;
+  formula_note?: string;
+  unverified_conditions?: string | null;
+  priority: string;
+  reviewer: string;
+  recommended_action?: string;
+  status: string;
+};
+
 export type RiskFlag = {
   rule_id?: string;
   rule_name?: string;
   status?: string;
   severity?: string;
   evidence?: string[];
+  evidence_refs?: Record<string, EvidenceRef[]>;
   impact?: string;
   recommended_action?: string;
 };
 
 export type AssessmentResult = {
   case_id?: string;
+  assessed_at?: string;
   customer_profile?: Record<string, unknown>;
   credit_engine?: Record<string, unknown>;
   risk_flags?: RiskFlag[];
   missing_data?: string[];
   credit_readiness?: string;
   recommendation?: string;
+  overview?: ConditionRow[];
+  overview_summary?: OverviewSummary;
+  overall_conclusion?: string | null;
+  documents?: DocumentStatus[];
+  crosssell_opportunities?: OpportunityCard[];
   why?: string[];
   credit_memo?: string;
   export_available?: boolean;
@@ -93,5 +159,28 @@ export async function runAssessment(
   if (!resp.ok) {
     throw new Error(`Thẩm định thất bại: HTTP ${resp.status}`);
   }
+  return resp.json();
+}
+
+export function evidenceFileUrl(caseId: string, fileId: string): string {
+  return `/api/eb/files/${encodeURIComponent(caseId)}/${encodeURIComponent(fileId)}`;
+}
+
+export type StressTestResult = {
+  assumptions: Record<string, unknown>;
+  before: Record<string, { value: number | null; status: string }>;
+  after: Record<string, { value: number | null; status: string }>;
+};
+
+export async function runStressTest(
+  inputs: Record<string, number | null>,
+  deltas: { revenue_pct?: number; margin_pct?: number; interest_rate_pct?: number; collection_speed_pct?: number }
+): Promise<StressTestResult> {
+  const resp = await fetch("/api/eb/stress-test", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ inputs, deltas }),
+  });
+  if (!resp.ok) throw new Error(`Stress test thất bại: HTTP ${resp.status}`);
   return resp.json();
 }
