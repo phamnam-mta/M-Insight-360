@@ -110,6 +110,87 @@ export type CrossSellPartnerRow = {
 };
 export type CrossSellEvidenceBlock = { tieu_de: string; tom_tat: string; noi_dung: Record<string, unknown> };
 
+export type HoSoPeriod = { selected: string | null; available: string[] };
+
+export type CapitalBalanceCheck = {
+  trai: number | null;
+  phai: number | null;
+  trang_thai: string;
+  nhan_xet: string;
+};
+
+export type StressTestMetric = { value: number | null; status: string };
+
+export type StressTestV2Result = {
+  assumptions: { human_readable: string; deltas: Record<string, number>; comprehensive_mode: boolean };
+  before: Record<string, unknown> & {
+    revenue: number | null;
+    ebit: number | null;
+    interest_expense: number | null;
+    nwc: StressTestMetric;
+    dscr: StressTestMetric;
+    icr: StressTestMetric;
+    debt_service_label: string;
+    principal_due: number | null;
+    debt_service_total: number | null;
+  };
+  after: StressTestV2Result["before"];
+  nwc_impact_quantifiable: boolean;
+  buffers: { dscr_buffer?: number; icr_buffer?: number };
+  conclusions: string[];
+  recommended_actions: string[];
+  disclaimer: string;
+};
+
+export type StressScenario = {
+  id: number;
+  case_id: string;
+  name: string;
+  created_by: string;
+  created_at: string;
+  report_period: string | null;
+  request: Record<string, unknown>;
+  response: StressTestV2Result;
+};
+
+export async function runStressTestV2(
+  inputs: Record<string, number | null>,
+  deltas: Record<string, number>,
+  comprehensiveMode: boolean
+): Promise<StressTestV2Result> {
+  const resp = await fetch("/api/eb/stress-test", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ inputs, deltas, comprehensive_mode: comprehensiveMode }),
+  });
+  if (!resp.ok) throw new Error(`Stress test thất bại: HTTP ${resp.status}`);
+  return resp.json();
+}
+
+export async function saveStressScenario(
+  caseId: string,
+  name: string,
+  createdBy: string,
+  reportPeriod: string | null,
+  request: Record<string, unknown>,
+  response: StressTestV2Result
+): Promise<{ id: number }> {
+  const resp = await fetch("/api/eb/stress-test/scenarios", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ case_id: caseId, name, created_by: createdBy, report_period: reportPeriod, request, response }),
+  });
+  if (!resp.ok) throw new Error(`Lưu kịch bản thất bại: HTTP ${resp.status}`);
+  return resp.json();
+}
+
+export async function fetchStressScenarios(caseId: string): Promise<StressScenario[]> {
+  const resp = await fetch(`/api/eb/stress-test/scenarios?case_id=${encodeURIComponent(caseId)}`);
+  if (!resp.ok) throw new Error(`Không tải được danh sách kịch bản: HTTP ${resp.status}`);
+  const body = await resp.json();
+  return body.scenarios ?? [];
+}
+
 export type AssessmentResult = {
   case_id?: string;
   assessed_at?: string;
@@ -128,6 +209,9 @@ export type AssessmentResult = {
   credit_memo?: string;
   export_available?: boolean;
   extraction_warnings?: string[];
+  // EB v2 screen redesign fields.
+  ho_so_period?: HoSoPeriod;
+  capital_balance_check?: CapitalBalanceCheck;
   // Cross-sell v3.1 fields — see comment above.
   status?: "ok" | "partial" | "blocked" | "error";
   request_id?: string;
