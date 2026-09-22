@@ -7,6 +7,7 @@ import { AssessmentResult, runAssessment } from "@/lib/api";
 type Props = {
   agentType: "rb" | "eb" | "crosssell";
   onResult: (result: AssessmentResult) => void;
+  onSubmitted?: (files: File[], customerName: string, taxId: string) => void;
 };
 
 const CROSSSELL_FIELDS: Array<{ key: string; label: string }> = [
@@ -22,7 +23,7 @@ const EB_FIELDS: Array<{ key: string; label: string }> = [
   { key: "eligible_contract_value_vnd", label: "Giá trị hợp đồng đủ điều kiện (VND)" },
 ];
 
-export default function AssessmentForm({ agentType, onResult }: Props) {
+export default function AssessmentForm({ agentType, onResult, onSubmitted }: Props) {
   const [customerName, setCustomerName] = useState("");
   const [taxId, setTaxId] = useState("");
   const [files, setFiles] = useState<File[]>([]);
@@ -38,6 +39,7 @@ export default function AssessmentForm({ agentType, onResult }: Props) {
     if (!canSubmit) return;
     setLoading(true);
     setError(null);
+    onSubmitted?.(files, customerName, taxId);
     try {
       const result = await runAssessment(
         agentType,

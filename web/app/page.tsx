@@ -7,7 +7,7 @@ import EbResultPanel from "@/components/EbResultPanel";
 import HistoryPanel from "@/components/HistoryPanel";
 import ResultPanel from "@/components/ResultPanel";
 import CrossSellPanel from "@/components/CrossSellPanel";
-import { AssessmentResult, saveHistoryItemLocally } from "@/lib/api";
+import { AssessmentResult, runAssessment, saveHistoryItemLocally } from "@/lib/api";
 
 const TAB_LABELS: Record<"rb" | "eb" | "crosssell", string> = {
   rb: "RB",
@@ -19,6 +19,13 @@ export default function Home() {
   const [tab, setTab] = useState<"rb" | "eb" | "crosssell">("eb");
   const [result, setResult] = useState<AssessmentResult | null>(null);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
+  const [lastEbFiles, setLastEbFiles] = useState<{ files: File[]; customerName: string; taxId: string } | null>(null);
+
+  async function handleRerunWithPeriod(period: string) {
+    if (!lastEbFiles) return;
+    const r = await runAssessment("eb", lastEbFiles.customerName, lastEbFiles.taxId, lastEbFiles.files, { report_period: period });
+    setResult(r);
+  }
 
   return (
     <main className="min-h-screen bg-msb-bg">
@@ -117,10 +124,15 @@ export default function Home() {
             );
             setHistoryRefreshKey((k) => k + 1);
           }}
+          onSubmitted={
+            tab === "eb"
+              ? (files, customerName, taxId) => setLastEbFiles({ files, customerName, taxId })
+              : undefined
+          }
         />
         <HistoryPanel agentType={tab} onSelect={setResult} refreshKey={historyRefreshKey} />
         {result && tab === "crosssell" && <CrossSellPanel result={result} />}
-        {result && tab === "eb" && <EbResultPanel result={result} />}
+        {result && tab === "eb" && <EbResultPanel result={result} onRerunWithPeriod={handleRerunWithPeriod} />}
         {result && tab === "rb" && <ResultPanel result={result} />}
       </div>
 
