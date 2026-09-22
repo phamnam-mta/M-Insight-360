@@ -10,6 +10,17 @@ CREATE TABLE IF NOT EXISTS assessments (
     result_json TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS case_files (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    case_id TEXT NOT NULL,
+    file_id TEXT NOT NULL,
+    filename TEXT NOT NULL,
+    content_type TEXT,
+    size_bytes INTEGER NOT NULL,
+    uploaded_at TEXT NOT NULL DEFAULT (datetime('now')),
+    storage_path TEXT NOT NULL
+);
 """
 
 
@@ -24,6 +35,9 @@ def init_db(db_path: str) -> None:
     conn = get_connection(db_path)
     try:
         conn.executescript(SCHEMA)
+        cols = {row["name"] for row in conn.execute("PRAGMA table_info(assessments)")}
+        if "case_id" not in cols:
+            conn.execute("ALTER TABLE assessments ADD COLUMN case_id TEXT")
         conn.commit()
     finally:
         conn.close()
