@@ -18,12 +18,16 @@ const STATUS_LABEL: Record<string, string> = {
   OK: "OK",
   WARN: "Cảnh báo",
   BLOCK: "Chặn",
+  ok: "OK",
+  partial: "Một phần",
+  blocked: "Chặn",
+  error: "Lỗi",
 };
 
 function statusOf(item: HistoryItem): string {
   const readiness = item.result?.credit_readiness;
-  const verdict = item.result?.precheck?.verdict;
-  const raw = readiness ?? verdict;
+  const crosssellStatus = item.result?.status;
+  const raw = readiness ?? crosssellStatus;
   if (!raw) return "—";
   return STATUS_LABEL[raw] ?? raw;
 }
@@ -40,7 +44,7 @@ function mergeHistoryItems(local: HistoryItem[], remote: HistoryItem[]): History
   const seen = new Set<string>();
   const combined: HistoryItem[] = [];
   for (const item of [...local, ...remote]) {
-    const key = item.result?.case_id ?? `${item.agent_type}-${item.id}`;
+    const key = item.result?.case_id ?? item.result?.ma_lo ?? `${item.agent_type}-${item.id}`;
     if (seen.has(key)) continue;
     seen.add(key);
     combined.push(item);

@@ -75,6 +75,41 @@ export type RiskFlag = {
   recommended_action?: string;
 };
 
+// Cross-sell v3.1 — POST /api/crosssell/assess returns a JSON shape driven
+// entirely by AGENT_CrossSell_INSTRUCTION_FINAL.md §C, structurally unlike
+// RB/EB's response (no credit_readiness/recommendation/risk_flags).
+export type CrossSellBadge = { loai: "ok" | "warn" | "err" | "info" | "na"; nhan: string; tro_toi?: string };
+export type CrossSellKpi = { nhan: string; gia_tri: string; phu?: string; nhan_manh?: boolean };
+export type CrossSellDetailBlock = { tieu_de: string; noi_dung: string };
+export type CrossSellScenario = { loai: "A" | "B"; doi_tuong: string; noi_dung: string };
+export type CrossSellOpportunity = {
+  rule_id: string;
+  san_pham: string;
+  segment: string;
+  deal_size: number | null;
+  deal_size_headline: string;
+  deal_size_exact: string | null;
+  priority: "P1" | "P2" | "P3" | "P-NA";
+  confidence: string | null;
+  ly_do_confidence: string | null;
+  signal_1dong: string;
+  chi_tiet: CrossSellDetailBlock[];
+  canh_bao: string[];
+  kich_ban: CrossSellScenario[];
+};
+export type CrossSellPartnerRow = {
+  ten: string;
+  chieu: string;
+  so_gd: number;
+  tong_gt: number;
+  diem: number;
+  trang_thai: string;
+  co_canh_bao: boolean;
+  nhan_canh_bao: string | null;
+  sp_de_xuat: string;
+};
+export type CrossSellEvidenceBlock = { tieu_de: string; tom_tat: string; noi_dung: Record<string, unknown> };
+
 export type AssessmentResult = {
   case_id?: string;
   assessed_at?: string;
@@ -92,37 +127,31 @@ export type AssessmentResult = {
   why?: string[];
   credit_memo?: string;
   export_available?: boolean;
-  // Cross-sell-only fields (POST /api/crosssell/assess returns a different
-  // shape than RB/EB — no credit_readiness/recommendation/risk_flags).
-  precheck?: {
-    verdict?: string;
-    reason?: string;
-    total_credit?: number;
-    total_debit?: number;
-  };
-  name_quality?: Record<string, unknown>;
-  flow_classification?: {
-    operating_in?: number;
-    operating_in_pct?: number;
-    cash?: number;
-    interbank?: number;
-  };
-  dashboard?: Array<{
-    month: string;
-    transaction_count: number;
-    total_in: number;
-    total_out: number;
-    net: number;
-  }>;
-  top_partners?: Array<{
-    partner: string;
-    transaction_count: number;
-    total_value: number;
-    qualifies: boolean;
-  }>;
-  opportunities?: RiskFlag[];
-  confidence_ceiling?: string;
   extraction_warnings?: string[];
+  // Cross-sell v3.1 fields — see comment above.
+  status?: "ok" | "partial" | "blocked" | "error";
+  request_id?: string;
+  ma_lo?: string;
+  ho_so?: {
+    ten_kh: string;
+    mst: string;
+    ky_sao_ke: string;
+    so_gd: number;
+    so_ngan_hang: number;
+    nganh_suy_doan: string;
+  };
+  badges?: CrossSellBadge[];
+  kpi?: CrossSellKpi[];
+  co_hoi?: CrossSellOpportunity[];
+  doi_tac?: {
+    canh_bao_cif: string;
+    danh_sach: CrossSellPartnerRow[];
+    ghi_chu_mo_rong: { tieu_de: string; noi_dung: string } | null;
+  };
+  evidence?: Record<string, CrossSellEvidenceBlock>;
+  ban_giao?: { noi_dung_mail: string; bang_tracking: unknown[]; ghi_chu_plumbing: string };
+  warnings?: string[];
+  error_code?: string | null;
 };
 
 export async function exportMb02(result: AssessmentResult): Promise<Blob> {

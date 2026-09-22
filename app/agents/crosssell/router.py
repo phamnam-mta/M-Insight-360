@@ -1,39 +1,16 @@
-import datetime
 import os
 import tempfile
-import time
-from dataclasses import asdict
 
 from fastapi import APIRouter, File, Form, UploadFile
 
 from app.config import get_settings
-from app.engine.core.timing import narrative_budget_exceeded
-from app.engine.core.types import RuleResult
 from app.extraction.pipeline import extract_document
 from app.storage.repository import save_assessment
 
-from .dashboard import build_monthly_dashboard
-from .flow_classification import classify_flows
-from .narrative import generate_narrative
-from .precheck import check_name_quality, run_precheck
-from .rule1_rule6 import evaluate_rule1_payroll, evaluate_rule6_loan_elsewhere
-from .rule2_partners import evaluate_rule2_top_partners, rank_top_partners
-from .rule3_rule4 import evaluate_rule3_idle_balance, evaluate_rule4_fx
-from .rule5_receivables import evaluate_rule5, leak_ratio_msb_share
-from .statement_parser import parse_statement_documents
+from .assembler import assemble_response
+from .statement_parser import any_table_has_simulated_balance_marker, parse_statement_documents
 
 router = APIRouter(prefix="/api/crosssell", tags=["crosssell"])
-
-
-def _serialize_rule_result(result: RuleResult) -> dict:
-    data = asdict(result)
-    # web/components/ResultPanel.tsx renders f.impact for each flag; RuleResult
-    # has no "impact" field, so alias it from the human-readable comment here at
-    # the HTTP boundary (same as RB's router) rather than growing the shared
-    # RuleResult type for one consumer.
-    data["impact"] = result.comment
-    return data
-
 
 
 @router.post("/assess")
@@ -47,8 +24,6 @@ async def assess(
     payables_331_vnd: float | None = Form(default=None),
     total_receivable_credit_131_vnd: float | None = Form(default=None),
 ) -> dict:
-    request_start = time.monotonic()
-    assessed_at = datetime.datetime.now(datetime.UTC).isoformat()
     with tempfile.TemporaryDirectory() as tmp_dir:
         saved_files: list[tuple[str, str]] = []
         for upload in files:
@@ -72,57 +47,20 @@ async def assess(
                 extraction_warnings.append(f"{name}: không đọc được nội dung file ({exc})")
 
         transactions = parse_statement_documents(documents)
+        simulated_marker = any_table_has_simulated_balance_marker(documents)
 
-        precheck = run_precheck(transactions, opening_balance, closing_balance)
-        name_quality = check_name_quality(transactions)
-        flows = classify_flows(transactions)
-        dashboard = build_monthly_dashboard(transactions)
-        top_partners = rank_top_partners(transactions)
-
-        # Rule 5D: tỷ lệ về MSB = operating_in(MSB) / Tổng phát sinh Có 131 — only computable
-        # when the RM has also supplied the total 131 credit turnover figure (a separate
-        # figure from the current receivables balance). Absent that, leak_ratio stays None
-        # and evaluate_rule5 correctly omits the 5D line rather than guessing.
-        leak_ratio = leak_ratio_msb_share(
-            operating_in_msb_vnd=flows["operating_in"],
+        computed = assemble_response(
+            customer_name=customer_name,
+            tax_id=tax_id,
+            raw_transactions=transactions,
+            opening_balance=opening_balance,
+            closing_balance=closing_balance,
+            receivables_131_current_vnd=receivables_131_current_vnd,
+            payables_331_vnd=payables_331_vnd,
             total_receivable_credit_131_vnd=total_receivable_credit_131_vnd,
-        ) if total_receivable_credit_131_vnd is not None else None
-
-        opportunities = [
-            evaluate_rule1_payroll(transactions),
-            evaluate_rule2_top_partners(transactions),
-            evaluate_rule3_idle_balance(None),  # no real balance column in this statement schema
-            evaluate_rule4_fx(transactions),
-            evaluate_rule5(receivables_131_current_vnd, payables_331_vnd, leak_ratio),
-            evaluate_rule6_loan_elsewhere(transactions),
-        ]
-
-        max_confidence = "M" if precheck["verdict"] == "WARN" else ("LOW" if precheck["verdict"] == "BLOCK" else "HIGH")
-
-        computed = {
-            "case_id": f"CROSSSELL-{tax_id}",
-            "assessed_at": assessed_at,
-            "customer_profile": {"customer_name": customer_name, "tax_id": tax_id},
-            "precheck": precheck,
-            "name_quality": name_quality,
-            "flow_classification": flows,
-            "dashboard": dashboard,
-            "top_partners": top_partners[:10],
-            "opportunities": [_serialize_rule_result(r) for r in opportunities],
-            "confidence_ceiling": max_confidence,
-            "extraction_warnings": extraction_warnings,
-        }
-
-        if precheck["verdict"] == "BLOCK":
-            narrative_result = {"why": [], "credit_memo": precheck["reason"]}
-        elif narrative_budget_exceeded(request_start):
-            narrative_result = {"why": [], "credit_memo": ""}
-        else:
-            narrative_result = generate_narrative(computed)
-
-        computed["why"] = narrative_result["why"]
-        computed["credit_memo"] = narrative_result["credit_memo"]
-        computed["export_available"] = False
+            documents_have_simulated_marker=simulated_marker,
+        )
+        computed["extraction_warnings"] = extraction_warnings
 
         save_assessment(get_settings().db_path, "crosssell", customer_name, tax_id, computed)
         return computed

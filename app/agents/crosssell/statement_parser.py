@@ -17,6 +17,7 @@ class Transaction:
     partner_bank: str
     currency: str
     source: str
+    balance: float | None = None
 
 
 # Different banks (and BTC's own MSB/MB/TPBank samples) don't all use MSB's exact
@@ -34,8 +35,24 @@ _COLUMN_ALIASES: dict[str, list[str]] = {
     "partner_bank": ["ngan hang doi tac", "nh doi tac"],
     "currency": ["loai tien"],
     "source": ["nguon"],
+    "balance": ["so du", "so du cuoi", "so du cuoi ky", "du cuoi"],
 }
 _REQUIRED_FOR_STATEMENT = {"date", "debit", "credit", "description"}
+
+# Spec §Bước 0 "LUẬT MỚI — PASS GIẢ": a balance column whose header names it as
+# simulated/derived (rather than read off the real statement) always makes the
+# audit equation balance to zero — a PASS on it proves nothing. Detected by
+# scanning the RAW header text (before alias-mapping), so it still fires even
+# when the column maps successfully under a "so du" alias.
+_SIMULATED_BALANCE_MARKERS = ["mo phong", "tinh ra", "gia dinh"]
+
+
+def header_marks_simulated_balance(header_row: list[str]) -> bool:
+    return any(
+        marker in _strip_accents_lower(cell)
+        for cell in header_row
+        for marker in _SIMULATED_BALANCE_MARKERS
+    )
 
 
 def _strip_accents_lower(text: str) -> str:
@@ -86,6 +103,7 @@ def _parse_table(table: ExtractedTable) -> list[Transaction]:
                 partner_bank=cell(row, "partner_bank"),
                 currency=cell(row, "currency") or "VND",
                 source=cell(row, "source"),
+                balance=parse_vn_number(cell(row, "balance")) if "balance" in mapping and cell(row, "balance") else None,
             )
         )
     return transactions
@@ -97,3 +115,11 @@ def parse_statement_documents(documents: list[ExtractedDocument]) -> list[Transa
         for table in doc.tables:
             transactions.extend(_parse_table(table))
     return transactions
+
+
+def any_table_has_simulated_balance_marker(documents: list[ExtractedDocument]) -> bool:
+    for doc in documents:
+        for table in doc.tables:
+            if table.rows and header_marks_simulated_balance(table.rows[0]):
+                return True
+    return False

@@ -1,5 +1,9 @@
 from app.extraction.types import ExtractedDocument, ExtractedTable
-from app.agents.crosssell.statement_parser import Transaction, parse_statement_documents
+from app.agents.crosssell.statement_parser import (
+    Transaction,
+    any_table_has_simulated_balance_marker,
+    parse_statement_documents,
+)
 
 
 def _statement_doc() -> ExtractedDocument:
@@ -85,3 +89,36 @@ def test_both_debit_and_credit_populated_prefers_credit_deterministically():
     txns = parse_statement_documents([doc])
     assert txns[0].debit == 100.0
     assert txns[0].credit == 200.0  # both kept as-is; classification layer decides how to use them
+
+
+def test_parses_real_balance_column_when_present():
+    header = ["Ngay", "So but toan", "Ghi No", "Ghi Co", "Dien giai", "So du"]
+    rows = [
+        header,
+        ["01/01/2026", "BT001", "0", "500000000", "Thanh toan", "8.500.000.000"],
+    ]
+    doc = ExtractedDocument(
+        filename="sao_ke.xlsx", doc_type="xlsx", text="", tables=[ExtractedTable(rows=rows, sheet_or_page="s")],
+        extraction_method="spreadsheet", confidence=1.0,
+    )
+    txns = parse_statement_documents([doc])
+    assert txns[0].balance == 8_500_000_000.0
+
+
+def test_no_balance_column_leaves_balance_none():
+    txns = parse_statement_documents([_statement_doc()])
+    assert txns[0].balance is None
+
+
+def test_detects_simulated_balance_column_marker():
+    header = ["Ngay", "So but toan", "Ghi No", "Ghi Co", "Dien giai", "So du (MO PHONG)"]
+    rows = [header, ["01/01/2026", "BT001", "0", "500000000", "Thanh toan", "8500000000"]]
+    doc = ExtractedDocument(
+        filename="sao_ke.xlsx", doc_type="xlsx", text="", tables=[ExtractedTable(rows=rows, sheet_or_page="s")],
+        extraction_method="spreadsheet", confidence=1.0,
+    )
+    assert any_table_has_simulated_balance_marker([doc]) is True
+
+
+def test_real_balance_column_is_not_flagged_as_simulated():
+    assert any_table_has_simulated_balance_marker([_statement_doc()]) is False
