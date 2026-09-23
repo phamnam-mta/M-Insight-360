@@ -19,18 +19,29 @@ function formatMetricValue(value: number | string | null, unit: string): string 
   return value.toLocaleString("vi-VN", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 }
 
+export type MetricTone = "ok" | "warn" | "bad" | "neutral";
+
+const TONE_BORDER: Record<MetricTone, string> = {
+  ok: "border-t-[#17976b]",
+  warn: "border-t-[#c8892a]",
+  bad: "border-t-[#e0362c]",
+  neutral: "border-t-[#8b97a8]",
+};
+
 export function MetricCard({
   label,
   unit,
   metric,
   note,
   compact = false,
+  tone = "neutral",
 }: {
   label: string;
   unit: string;
   metric: MetricValue;
   note?: string;
   compact?: boolean;
+  tone?: MetricTone;
 }) {
   const [open, setOpen] = useState(false);
   const hasValue = metric.status === "OK" && metric.value !== null;
@@ -50,9 +61,12 @@ export function MetricCard({
 
   if (!hasValue) {
     return (
-      <div data-testid="eb-kpi-card" className="bg-gray-50 rounded-lg border border-gray-100 p-2.5 self-start">
+      <div
+        data-testid="eb-kpi-card"
+        className="bg-[#f6f8fb] rounded-lg border-t-4 border-t-[#cfd7e2] border border-gray-100 border-t-4 p-2.5 self-start"
+      >
         <h3 className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">{label}</h3>
-        <p className="text-base font-semibold text-gray-400 mt-0.5">—</p>
+        <p className="text-base font-semibold text-[#8b97a8] mt-0.5">Chưa đủ dữ liệu</p>
         <button className="text-[11px] text-msb-navy underline mt-1" onClick={() => setOpen((v) => !v)}>
           {open ? "Ẩn giải thích" : "Giải thích"}
         </button>
@@ -68,7 +82,10 @@ export function MetricCard({
   }
 
   return (
-    <div data-testid="eb-kpi-card" className="bg-white rounded-lg border border-gray-100 shadow-sm p-4">
+    <div
+      data-testid="eb-kpi-card"
+      className={`bg-white rounded-lg border border-gray-100 border-t-4 shadow-sm p-4 ${TONE_BORDER[tone]}`}
+    >
       <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wide">{label}</h3>
       <p className="text-2xl font-bold mt-1 text-msb-navy">
         {formatMetricValue(metric.value, unit)} {unit}

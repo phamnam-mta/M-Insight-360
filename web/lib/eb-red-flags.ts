@@ -23,14 +23,27 @@ export function splitRiskFlags(flags: RiskFlag[]): { nhomA: RiskFlag[]; nhomB: R
 }
 
 // Mirrors the instruction's ★ (required) fields from BẢNG MAP TRƯỜNG CHUẨN.
-const REQUIRED_FIELD_NAMES = [
-  "net_revenue_vnd", "pbt_vnd", "pat_vnd", "interest_expense_vnd",
-  "depreciation_vnd", "current_assets_vnd", "current_liabilities_vnd",
-  "equity_vnd", "receivables_vnd",
-];
+export const REQUIRED_FIELD_LABELS: Record<string, string> = {
+  net_revenue_vnd: "Doanh thu thuần",
+  pbt_vnd: "Lợi nhuận trước thuế",
+  pat_vnd: "Lợi nhuận sau thuế",
+  interest_expense_vnd: "Chi phí lãi vay",
+  depreciation_vnd: "Khấu hao",
+  current_assets_vnd: "Tài sản ngắn hạn",
+  current_liabilities_vnd: "Nợ ngắn hạn",
+  equity_vnd: "Vốn chủ sở hữu",
+  receivables_vnd: "Phải thu khách hàng",
+};
+const REQUIRED_FIELD_NAMES = Object.keys(REQUIRED_FIELD_LABELS);
 
 export function computeCoverage(financialInputs?: Record<string, number>): number {
   if (!financialInputs) return 0;
   const present = REQUIRED_FIELD_NAMES.filter((f) => typeof financialInputs[f] === "number").length;
   return Math.round((present / REQUIRED_FIELD_NAMES.length) * 100);
+}
+
+// The BCTC-required fields a hồ sơ still hasn't produced a value for —
+// drives R2's "Trường BCTC chưa đọc được" checklist.
+export function missingRequiredFieldLabels(financialInputs?: Record<string, number>): string[] {
+  return REQUIRED_FIELD_NAMES.filter((f) => typeof financialInputs?.[f] !== "number").map((f) => REQUIRED_FIELD_LABELS[f]);
 }

@@ -63,51 +63,42 @@ export function FinancialDataTable({
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-100 p-5 space-y-4">
-      <h3 className="text-sm font-semibold text-msb-navy">Dữ liệu BCTC cốt lõi (VND)</h3>
+    <div className="bg-white rounded-xl border border-gray-100 p-5 space-y-3">
+      <SectionHeaderInline title="Dữ liệu đã trích xuất · truy vết" />
       {groups.map((group) => (
-        <div key={group}>
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1.5">{group}</p>
-          <table className="w-full text-sm table-fixed">
-            <colgroup>
-              <col className="w-[56%]" />
-              <col className="w-[44%]" />
-            </colgroup>
-            <tbody>
-              {Object.entries(FIELD_CODES)
-                .filter(([, meta]) => meta.group === group)
-                .map(([key, meta]) => {
-                  const { value, source, suspectReason } = rowValue(key);
-                  const hasValue = typeof value === "number";
-                  return (
-                    <tr key={key} className="border-b border-gray-50 last:border-0">
-                      <td className="py-2 pr-2 align-top break-words">
-                        <button
-                          className="text-left"
-                          title={meta.formula}
-                          onClick={() => setOpenRow(openRow === key ? null : key)}
-                        >
-                          <span className="text-msb-navy">{meta.label}</span>
-                          <span className="block text-[10px] text-gray-400">{meta.code}</span>
-                        </button>
-                        {openRow === key && <p className="text-[11px] text-gray-500 mt-1">{meta.formula}</p>}
-                      </td>
-                      <td className="py-2 text-right align-top break-words">
-                        <span className={hasValue ? "text-msb-navy font-medium" : "text-amber-600"}>
-                          {hasValue ? formatVndSmart(value) : suspectReason ? "— (nghi ngờ sai dòng)" : "Chưa xác định từ hồ sơ tải lên"}
-                        </span>
-                        <span className="block text-[10px] text-gray-400">
-                          {source === "manual_rm_input" ? "Người dùng điều chỉnh" : hasValue ? "AI trích xuất" : ""}
-                        </span>
-                        {suspectReason && <p className="text-[10px] text-amber-600 mt-0.5">{suspectReason}</p>}
-                      </td>
-                    </tr>
-                  );
-                })}
-            </tbody>
-          </table>
+        <div key={group} className="space-y-0.5">
+          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide pt-1">{group}</p>
+          {Object.entries(FIELD_CODES)
+            .filter(([, meta]) => meta.group === group)
+            .map(([key, meta]) => {
+              const { value, source, suspectReason } = rowValue(key);
+              const hasValue = typeof value === "number";
+              return (
+                <button
+                  key={key}
+                  className="block w-full text-left"
+                  onClick={() => setOpenRow(openRow === key ? null : key)}
+                >
+                  <div className="flex justify-between gap-3 text-[13.5px] py-1.5">
+                    <span className="text-gray-500">{meta.label}</span>
+                    <span className={hasValue ? "font-semibold text-msb-navy text-right" : "font-semibold text-[#8b97a8] text-right text-[12px]"}>
+                      {hasValue ? formatVndSmart(value) : suspectReason ? "Nghi ngờ sai dòng" : "Chưa xác định từ hồ sơ tải lên"}
+                    </span>
+                  </div>
+                  <div className="text-[10.5px] text-gray-400 border-b border-dashed border-gray-100 pb-1.5 -mt-0.5 text-right">
+                    {suspectReason ??
+                      (source === "manual_rm_input" ? "Người dùng điều chỉnh" : hasValue ? meta.code : "chưa đọc được từ hồ sơ")}
+                  </div>
+                  {openRow === key && <p className="text-[11px] text-gray-500 pt-1 text-right">{meta.formula}</p>}
+                </button>
+              );
+            })}
         </div>
       ))}
     </div>
   );
+}
+
+function SectionHeaderInline({ title }: { title: string }) {
+  return <h3 className="text-sm font-semibold text-msb-navy">{title}</h3>;
 }

@@ -128,10 +128,10 @@ test.describe("EB result panel — v2.3 layout (Phần C, T22-T28)", () => {
     await openEbResult(page);
     await expect(page.getByText("Kết luận thẩm định")).toBeVisible();
     await expect(page.locator('[data-testid="eb-kpi-card"]')).toHaveCount(4);
-    await expect(page.getByText("Cân đối tài chính")).toBeVisible();
-    await expect(page.getByText("Tài trợ Chuỗi QĐ 039")).toBeVisible();
+    await expect(page.getByText("Cân bằng hai vế · kỳ hạn nguồn vốn")).toBeVisible();
+    await expect(page.getByText("Tài trợ chuỗi — QĐ.EB.039 (chỉ tiêu thẩm định)")).toBeVisible();
     await expect(page.getByText("Tín hiệu tín dụng cần thẩm định thêm")).toBeVisible();
-    await expect(page.getByText("Cảnh báo dữ liệu")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Cảnh báo dữ liệu" })).toBeVisible();
   });
 
   test("T27: a year-collision suspect value renders as unknown, not as the real number", async ({ page }) => {

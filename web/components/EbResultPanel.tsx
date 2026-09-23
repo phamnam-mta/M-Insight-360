@@ -1,9 +1,6 @@
 "use client";
 
 import {
-  Badge as BadgeIcon,
-  Building2,
-  Clock,
   ClipboardList,
   File,
   FileDown,
@@ -19,18 +16,21 @@ import {
   evidenceFileUrl,
   exportMb02,
 } from "@/lib/api";
-import { computeCoverage, splitRiskFlags } from "@/lib/eb-red-flags";
+import { computeCoverage, missingRequiredFieldLabels, REQUIRED_FIELD_LABELS, splitRiskFlags } from "@/lib/eb-red-flags";
 import { AiInsightSection } from "./shared/AiInsightSection";
-import { InfoBar, InfoBarItem } from "./shared/InfoBar";
-import { MetricCard, MetricValue } from "./shared/MetricCard";
+import { MetricCard, MetricTone, MetricValue } from "./shared/MetricCard";
 import { SectionHeader } from "./shared/SectionHeader";
 import { useState } from "react";
 import { CompanyInfoBlock } from "./eb/CompanyInfoBlock";
+import { EbHeaderBar } from "./eb/EbHeaderBar";
+import { PreCheckCard } from "./eb/PreCheckCard";
 import { FinancialDataTable } from "./eb/FinancialDataTable";
 import { CapitalBalanceDiagram } from "./eb/CapitalBalanceDiagram";
 import { ExportGateScreen } from "./eb/ExportGateScreen";
+import { ExportGateSummaryCard } from "./eb/ExportGateSummaryCard";
 import { Qd039Card } from "./eb/Qd039Card";
 import { EbRiskFlagsPriorityList } from "./eb/EbRiskFlagsPriorityList";
+import { RmChecklistCard } from "./eb/RmChecklistCard";
 import { LockedPlaceholders } from "./eb/LockedPlaceholders";
 import { StressTestDrawer } from "./eb/StressTestDrawer";
 
@@ -252,27 +252,61 @@ export default function EbResultPanel({
   const lowCoverageMode = coverage < 30;
   const { nhomA, nhomB } = splitRiskFlags(result.risk_flags ?? []);
   const ce = result.credit_engine as Record<string, MetricValue> | undefined;
-  const KPI_ORDER: { key: string; label: string; unit: string }[] = [
-    { key: "nwc", label: "Vốn lưu động ròng", unit: "VND" },
+  const missingFields = missingRequiredFieldLabels(result.financial_inputs as Record<string, number> | undefined);
+  // The Nhôm A rule tied to each KPI, if any — drives the KPI card's
+  // top-border tone (ok/warn/bad) alongside its own OK/NEED_MORE_DATA status.
+  const KPI_ORDER: { key: string; label: string; unit: string; ruleId?: string }[] = [
+    { key: "nwc", label: "Vốn lưu động ròng", unit: "VND", ruleId: "RF01" },
     { key: "liquidity_balance", label: "Cân đối thanh khoản", unit: "" },
-    { key: "dscr", label: "DSCR", unit: "lần" },
-    { key: "icr", label: "ICR", unit: "lần" },
+    { key: "dscr", label: "DSCR", unit: "lần", ruleId: "RF05" },
+    { key: "icr", label: "ICR", unit: "lần", ruleId: "RF09" },
   ];
+  function kpiTone(key: string, ruleId?: string): MetricTone {
+    const metric = ce?.[key] as MetricValue | undefined;
+    if (metric?.status !== "OK") return "neutral";
+    if (!ruleId) return "ok";
+    const flag = (result.risk_flags ?? []).find((f) => f.rule_id === ruleId);
+    return flag?.status === "KÍCH HOẠT" ? "bad" : "ok";
+  }
+
+  const overallTone: "ok" | "warn" | "bad" =
+    result.credit_readiness === "MANUAL_REVIEW_REQUIRED" || gate?.verdict === "KHONG_XUAT_TU_DONG"
+      ? "bad"
+      : result.credit_readiness === "READY" && missingFields.length === 0
+        ? "ok"
+        : "warn";
+  const BANNER_BORDER: Record<typeof overallTone, string> = {
+    ok: "border-l-[#17976b]",
+    warn: "border-l-[#c8892a]",
+    bad: "border-l-[#e0362c]",
+  };
 
   return (
-    <div className="mt-6">
-      <InfoBar
-        items={[
-          { icon: BadgeIcon, label: "Mã hồ sơ", value: result.case_id ?? "—" },
-          { icon: Clock, label: "Thời điểm chạy", value: result.assessed_at ?? "—" },
-        ]}
-        banner={result.overall_conclusion}
-      />
+    <div className="mt-6 space-y-4">
+      <EbHeaderBar result={result} />
 
-      <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr_340px] gap-5 mt-5 min-w-0">
+      <div className={`bg-white border-l-[5px] rounded-lg px-4.5 py-3.5 text-sm shadow-sm ${BANNER_BORDER[overallTone]}`}>
+        <p>
+          <b>
+            {result.overall_conclusion ??
+              (result.credit_readiness ? CREDIT_READINESS_LABELS[result.credit_readiness] ?? result.credit_readiness : "—")}
+          </b>{" "}
+          Hồ sơ khách hàng cung cấp đọc được {Object.keys(REQUIRED_FIELD_LABELS).length - missingFields.length}/
+          {Object.keys(REQUIRED_FIELD_LABELS).length} trường bắt buộc ({coverage}%).
+          {missingFields.length > 0 && (
+            <>
+              {" "}
+              Chưa đọc được: <b>{missingFields.join(", ")}</b>.
+            </>
+          )}
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr_330px] gap-5 min-w-0">
         {/* Cột trái (L1/L2) */}
         <div className="space-y-5 order-4 lg:order-1 min-w-0">
           <CompanyInfoBlock result={result} onPeriodChange={(y) => onRerunWithPeriod?.(y)} />
+          <PreCheckCard result={result} />
           <FinancialDataTable
             creditEngine={ce}
             financialInputs={result.financial_inputs}
@@ -311,13 +345,14 @@ export default function EbResultPanel({
 
           {/* M3 — 4 thẻ KPI cố định */}
           <div className="grid grid-cols-4 gap-3 items-start">
-            {KPI_ORDER.map(({ key, label, unit }) => (
+            {KPI_ORDER.map(({ key, label, unit, ruleId }) => (
               <MetricCard
                 key={key}
                 label={label}
                 unit={unit}
                 metric={(ce?.[key] as MetricValue) ?? { value: null, status: "NEED_MORE_DATA" }}
                 compact={lowCoverageMode}
+                tone={kpiTone(key, ruleId)}
               />
             ))}
           </div>
@@ -325,7 +360,7 @@ export default function EbResultPanel({
           {/* M4 */}
           <CapitalBalanceDiagram check={result.capital_balance_check} />
           {/* M5 */}
-          <Qd039Card creditEngine={ce} />
+          <Qd039Card creditEngine={ce} receivablesVnd={result.financial_inputs?.receivables_vnd ?? null} />
 
           {/* PHẦN 2 — Cảnh báo rủi ro */}
           {/* M6 */}
@@ -350,6 +385,13 @@ export default function EbResultPanel({
 
         {/* Cột phải — R1 (một panel duy nhất) + R2 */}
         <div className="space-y-5 order-3 min-w-0">
+          {gate && (
+            <ExportGateSummaryCard
+              gate={gate}
+              equityVnd={result.financial_inputs?.equity_vnd ?? null}
+              exportFilename={`TTTD_..._${result.ho_so_period?.selected ?? ""}_..._BANNHAP.docx`}
+            />
+          )}
           <div data-testid="eb-r1-panel" className="bg-white rounded-lg shadow-sm border border-gray-100 p-6 space-y-3">
             <AiInsightSection
               why={result.why ?? []}
@@ -389,6 +431,7 @@ export default function EbResultPanel({
           </div>
 
           {/* R2 */}
+          <RmChecklistCard financialInputs={result.financial_inputs} />
           <LockedPlaceholders />
         </div>
       </div>
