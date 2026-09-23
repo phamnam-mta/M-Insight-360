@@ -338,7 +338,7 @@ export default function EbResultPanel({
 
         {/* Cột phải — R1 (một panel duy nhất) + R2 */}
         <div className="space-y-5 order-3 min-w-0">
-          <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6 space-y-3">
+          <div data-testid="eb-r1-panel" className="bg-white rounded-lg shadow-sm border border-gray-100 p-6 space-y-3">
             <AiInsightSection why={result.why ?? []} creditMemo={result.credit_memo} title="M-Insight AI" />
             {/* R1.4 — hàng nút hành động, TRONG CÙNG panel */}
             <div className="flex flex-wrap gap-2 border-t border-gray-100 pt-3">
