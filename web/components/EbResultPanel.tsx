@@ -19,8 +19,8 @@ import {
   evidenceFileUrl,
   exportMb02,
 } from "@/lib/api";
+import { computeCoverage, splitRiskFlags } from "@/lib/eb-red-flags";
 import { AiInsightSection } from "./shared/AiInsightSection";
-import { CrossSellOpportunities } from "./shared/CrossSellOpportunities";
 import { InfoBar, InfoBarItem } from "./shared/InfoBar";
 import { MetricCard, MetricValue } from "./shared/MetricCard";
 import { SectionHeader } from "./shared/SectionHeader";
@@ -30,6 +30,7 @@ import { FinancialDataTable } from "./eb/FinancialDataTable";
 import { CapitalBalanceDiagram } from "./eb/CapitalBalanceDiagram";
 import { Qd039Card } from "./eb/Qd039Card";
 import { EbRiskFlagsPriorityList } from "./eb/EbRiskFlagsPriorityList";
+import { LockedPlaceholders } from "./eb/LockedPlaceholders";
 import { StressTestDrawer } from "./eb/StressTestDrawer";
 
 function fileIconFor(filename: string) {
@@ -142,17 +143,6 @@ function OverviewTable({ rows, caseId }: { rows: ConditionRow[]; caseId?: string
   );
 }
 
-const METRIC_LABELS: Record<string, { label: string; unit: string; note?: string }> = {
-  nwc: { label: "Vốn lưu động ròng (NWC)", unit: "VND" },
-  dscr: { label: "Hệ số trả nợ (DSCR)", unit: "lần" },
-  icr: { label: "Hệ số bù đắp lãi vay (ICR)", unit: "lần" },
-  output_contract_financing_ratio: {
-    label: "Tỷ lệ tài trợ hợp đồng đầu ra",
-    unit: "%",
-    note: "Tỷ lệ đề xuất, chưa phải mức đã phê duyệt.",
-  },
-};
-
 const DOC_STATUS_LABEL: Record<string, string> = {
   "KHÔNG_ĐỌC_ĐƯỢC": "Không đọc được",
   "ĐÃ_TRÍCH_XUẤT": "Đã trích xuất",
@@ -210,11 +200,16 @@ export default function EbResultPanel({
   const summary = result.overview_summary;
   const [stressOpen, setStressOpen] = useState(false);
 
-  const EXTENDED_METRIC_LABELS: Record<string, { label: string; unit: string; note?: string }> = {
-    ...METRIC_LABELS,
-    ebitda: { label: "EBITDA", unit: "VND" },
-    liquidity_balance: { label: "Cân đối thanh khoản", unit: "" },
-  };
+  const coverage = computeCoverage(result.financial_inputs as Record<string, number> | undefined);
+  const lowCoverageMode = coverage < 30;
+  const { nhomA, nhomB } = splitRiskFlags(result.risk_flags ?? []);
+  const ce = result.credit_engine as Record<string, MetricValue> | undefined;
+  const KPI_ORDER: { key: string; label: string; unit: string }[] = [
+    { key: "nwc", label: "Vốn lưu động ròng", unit: "VND" },
+    { key: "liquidity_balance", label: "Cân đối thanh khoản", unit: "" },
+    { key: "dscr", label: "DSCR", unit: "lần" },
+    { key: "icr", label: "ICR", unit: "lần" },
+  ];
 
   return (
     <div className="mt-6">
@@ -227,26 +222,23 @@ export default function EbResultPanel({
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr_340px] gap-5 mt-5 min-w-0">
-        {/* Cột trái — Hồ sơ & dữ liệu gốc */}
+        {/* Cột trái (L1/L2) */}
         <div className="space-y-5 order-4 lg:order-1 min-w-0">
           <CompanyInfoBlock result={result} onPeriodChange={(y) => onRerunWithPeriod?.(y)} />
           <FinancialDataTable
-            creditEngine={result.credit_engine as Record<string, MetricValue> | undefined}
+            creditEngine={ce}
             financialInputs={result.financial_inputs}
           />
         </div>
 
-        {/* Cột giữa — Sức khỏe tài chính & quyết định tín dụng */}
+        {/* Cột giữa — PHẦN 1: Kết luận & sức khỏe tài chính */}
         <div className="space-y-5 order-2 min-w-0">
+          {/* M1 */}
           <div className="bg-white rounded-xl border border-gray-100 p-6 space-y-3">
             <SectionHeader
               icon={ClipboardList}
               title="Kết luận thẩm định"
-              subtitle={
-                summary
-                  ? `${summary.checked}/${summary.total} điều kiện đã kiểm tra đủ dữ liệu; kỳ ${result.ho_so_period?.selected ?? "—"}.`
-                  : undefined
-              }
+              subtitle={`Kỳ ${result.ho_so_period?.selected ?? "—"} · Độ phủ dữ liệu ${coverage}%`}
             />
             <p className="text-sm font-semibold text-msb-navy">{result.overall_conclusion ?? result.credit_readiness ?? "—"}</p>
             <p className="text-[11px] text-gray-400">
@@ -254,28 +246,40 @@ export default function EbResultPanel({
             </p>
           </div>
 
-          {result.credit_engine && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {Object.entries(result.credit_engine)
-                .filter(([key]) => key in EXTENDED_METRIC_LABELS)
-                .map(([key, metric]) => {
-                  const meta = EXTENDED_METRIC_LABELS[key];
-                  return (
-                    <MetricCard
-                      key={key}
-                      label={meta.label}
-                      unit={meta.unit}
-                      note={meta.note}
-                      metric={metric as MetricValue}
-                    />
-                  );
-                })}
+          {/* M2 — chỉ khi độ phủ < 30% */}
+          {lowCoverageMode && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 space-y-2">
+              <h3 className="text-sm font-semibold text-amber-800">Cần bổ sung để chạy thẩm định</h3>
+              <p className="text-xs text-amber-700">
+                Hồ sơ mới đọc được {coverage}% chỉ tiêu bắt buộc — bổ sung các trường còn thiếu để
+                hệ thống đưa kết luận thẩm định đầy đủ.
+              </p>
             </div>
           )}
 
+          {/* M3 — 4 thẻ KPI cố định */}
+          <div className="grid grid-cols-4 gap-3 items-start">
+            {KPI_ORDER.map(({ key, label, unit }) => (
+              <MetricCard
+                key={key}
+                label={label}
+                unit={unit}
+                metric={(ce?.[key] as MetricValue) ?? { value: null, status: "NEED_MORE_DATA" }}
+                compact={lowCoverageMode}
+              />
+            ))}
+          </div>
+
+          {/* M4 */}
           <CapitalBalanceDiagram check={result.capital_balance_check} />
-          <Qd039Card creditEngine={result.credit_engine as Record<string, MetricValue> | undefined} />
-          <EbRiskFlagsPriorityList flags={result.risk_flags ?? []} />
+          {/* M5 */}
+          <Qd039Card creditEngine={ce} />
+
+          {/* PHẦN 2 — Cảnh báo rủi ro */}
+          {/* M6 */}
+          <EbRiskFlagsPriorityList flags={nhomA} variant="nhom_a" />
+          {/* M7 */}
+          <EbRiskFlagsPriorityList flags={nhomB} variant="nhom_b" />
 
           <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6 space-y-3">
             <SectionHeader
@@ -292,46 +296,49 @@ export default function EbResultPanel({
           <DocumentPanel documents={result.documents ?? []} />
         </div>
 
-        {/* Cột phải — M-Insight AI & bán chéo */}
+        {/* Cột phải — R1 (một panel duy nhất) + R2 */}
         <div className="space-y-5 order-3 min-w-0">
-          <AiInsightSection why={result.why ?? []} creditMemo={result.credit_memo} title="M-Insight AI" />
-
-          <div className="bg-white rounded-xl border border-gray-100 p-5 flex flex-wrap gap-2">
-            <button
-              onClick={() => setStressOpen(true)}
-              className="text-xs font-semibold px-3 py-2 rounded-lg bg-msb-navy text-white"
-            >
-              Stress Test
-            </button>
-            {result.export_available && (
+          <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6 space-y-3">
+            <AiInsightSection why={result.why ?? []} creditMemo={result.credit_memo} title="M-Insight AI" />
+            {/* R1.4 — hàng nút hành động, TRONG CÙNG panel */}
+            <div className="flex flex-wrap gap-2 border-t border-gray-100 pt-3">
               <button
-                onClick={async () => {
-                  try {
-                    const blob = await exportMb02(result);
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement("a");
-                    a.href = url;
-                    a.download = "to-trinh-mb02-du-thao.docx";
-                    a.click();
-                    URL.revokeObjectURL(url);
-                  } catch (err) {
-                    alert(err instanceof Error ? err.message : "Xuất tờ trình thất bại.");
-                  }
-                }}
-                className="text-xs font-semibold px-3 py-2 rounded-lg border border-msb-navy text-msb-navy"
+                onClick={() => setStressOpen(true)}
+                className="text-xs font-semibold px-3 py-2 rounded-lg bg-msb-navy text-white"
               >
-                <span className="inline-flex items-center gap-1.5">
-                  <FileDown className="h-3.5 w-3.5" />
-                  Soạn tờ trình MB02a
-                </span>
+                Stress Test
               </button>
-            )}
+              {result.export_available && (
+                <button
+                  onClick={async () => {
+                    // TODO(Task 15): replace with the S7-gate-aware flow
+                    // (409 refusal → ExportGateScreen, force override,
+                    // Content-Disposition-derived filename).
+                    try {
+                      const blob = await exportMb02(result);
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = url;
+                      a.download = "to-trinh-mb02-du-thao.docx";
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    } catch (err) {
+                      alert(err instanceof Error ? err.message : "Xuất tờ trình thất bại.");
+                    }
+                  }}
+                  className="text-xs font-semibold px-3 py-2 rounded-lg border border-msb-navy text-msb-navy"
+                >
+                  <span className="inline-flex items-center gap-1.5">
+                    <FileDown className="h-3.5 w-3.5" />
+                    Soạn tờ trình MB02a
+                  </span>
+                </button>
+              )}
+            </div>
           </div>
 
-          <CrossSellOpportunities
-            opportunities={result.crosssell_opportunities ?? []}
-            title="Cơ hội bán chéo"
-          />
+          {/* R2 */}
+          <LockedPlaceholders />
         </div>
       </div>
 
