@@ -87,3 +87,18 @@ def test_insufficient_data_flags_never_count_as_signals():
     result = evaluate_export_gate(flags, equity_vnd=1000, dscr=_metric(1.5), icr=_metric(2.0))
     assert result.signal_count == 0
     assert result.verdict == "XUAT_KEM_CANH_BAO"  # the CHƯA ĐÁNH GIÁ flag is still a data warning
+
+
+def test_pre_check_blocked_carries_loai_chan_through():
+    result = evaluate_export_gate(
+        [], equity_vnd=1000, dscr=_metric(1.5), icr=_metric(2.0),
+        pre_check_blocked=True, loai_chan="LECH_DU_LIEU",
+    )
+    assert result.verdict == "KHONG_XUAT_TU_DONG"
+    assert result.block_type == "HARD"
+    assert result.loai_chan == "LECH_DU_LIEU"
+
+
+def test_normal_hard_block_has_no_loai_chan():
+    result = evaluate_export_gate([], equity_vnd=1000, dscr=_metric(1.5), icr=_metric(2.0), pre_check_blocked=True)
+    assert result.loai_chan is None

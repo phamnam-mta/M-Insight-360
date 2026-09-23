@@ -903,3 +903,19 @@ def test_assess_endpoint_bank_statement_only_upload_still_hard_blocks(monkeypatc
     body = resp.json()
     assert body["export_gate"]["verdict"] == "KHONG_XUAT_TU_DONG"
     assert body["export_gate"]["block_type"] == "HARD"
+
+
+def test_export_force_cannot_bypass_lech_du_lieu_hard_block_t33():
+    client = TestClient(app)
+    computed = {
+        "customer_profile": {"customer_name": "ACME"},
+        "financial_inputs": {"equity_vnd": 100.0},
+        "credit_engine": {"dscr": {"value": None, "status": "NEED_MORE_DATA"}, "icr": {"value": None, "status": "NEED_MORE_DATA"}},
+        "risk_flags": [], "ho_so_period": {"selected": "2025"},
+        "consistency": {"khop": False, "danh_sach_lech": [{"chi_tieu": "Vốn chủ sở hữu", "gia_tri": [1, 2]}]},
+    }
+    resp = client.post("/api/eb/export", json={"computed": computed, "force": True})
+    assert resp.status_code == 409
+    body = resp.json()
+    assert body["block_type"] == "HARD"
+    assert body.get("loai_chan") == "LECH_DU_LIEU"

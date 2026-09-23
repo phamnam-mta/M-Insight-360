@@ -366,6 +366,12 @@ async def export(payload: dict) -> Response:
     icr = _metric_from_credit_engine(credit_engine, "icr")
     equity_vnd = (computed.get("financial_inputs") or {}).get("equity_vnd")
     sanity_check = computed.get("sanity_check") or {}
+    consistency = computed.get("consistency") or {}
+    # S7.2(f): re-check the same combined consistency signal /assess
+    # computed — a same-year cross-sheet conflict (canonical.consistency)
+    # or a balance sheet that doesn't balance are both document defects,
+    # never force-overridable.
+    khop = consistency.get("khop", True) and not sanity_check.get("balance_mismatch")
 
     gate = evaluate_export_gate(
         risk_flags, equity_vnd=equity_vnd, dscr=dscr, icr=icr,
@@ -373,7 +379,8 @@ async def export(payload: dict) -> Response:
         # doesn't balance is a document defect, never overridable by
         # force — the re-posted `computed` carries /assess's own
         # sanity_check verdict, so this must be re-checked here too.
-        pre_check_blocked=bool(sanity_check.get("balance_mismatch")),
+        pre_check_blocked=not khop,
+        loai_chan="LECH_DU_LIEU" if not khop else None,
     )
 
     # HARD blocks (unreadable upload, balance mismatch) are never
@@ -386,6 +393,7 @@ async def export(payload: dict) -> Response:
             "signal_count": gate.signal_count,
             "reasons": gate.reasons,
             "signals": [asdict(s) for s in gate.signals],
+            "loai_chan": gate.loai_chan,
         })
 
     computed = {**computed, "export_gate": asdict(gate)}
