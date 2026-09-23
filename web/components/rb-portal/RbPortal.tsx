@@ -9,6 +9,9 @@ import { OverviewTab } from "./tabs/OverviewTab";
 import { CustomerTab } from "./tabs/CustomerTab";
 import { LegalTab } from "./tabs/LegalTab";
 import { IncomeTab } from "./tabs/IncomeTab";
+import { LoanTab } from "./tabs/LoanTab";
+import { CollateralTab } from "./tabs/CollateralTab";
+import { OtherDocsTab } from "./tabs/OtherDocsTab";
 import { ZaloBotModal } from "./ZaloBotModal";
 
 const TABS = [
@@ -73,7 +76,10 @@ export default function RbPortal() {
         {activeTab === "customer" && caseId && <CustomerTab caseId={caseId} />}
         {activeTab === "legal" && caseId && <LegalTab caseId={caseId} />}
         {activeTab === "income" && caseId && <IncomeTab caseId={caseId} />}
-        {/* Tasks 15-19 render the remaining tabs here */}
+        {activeTab === "loan" && caseId && <LoanTab caseId={caseId} />}
+        {activeTab === "collateral" && caseId && <CollateralTab caseId={caseId} />}
+        {activeTab === "other" && caseId && <OtherDocsTab caseId={caseId} />}
+        {/* Tasks 16-19 render the remaining tabs here */}
       </div>
 
       <ZaloBotModal open={zaloOpen} onClose={() => setZaloOpen(false)} />
