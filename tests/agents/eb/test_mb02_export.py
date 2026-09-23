@@ -160,3 +160,24 @@ def test_s8_cif_field_keeps_template_ellipsis():
     row = next(r for r in doc.tables[2].rows if "Đăng ký kinh doanh" == r.cells[0].text.strip())
     assert "……" in row.cells[1].text
     assert "[Chưa xác định" not in row.cells[1].text
+
+
+def test_force_banner_inserted_at_top_when_forced_and_blocked():
+    computed = _make_computed()
+    computed["export_gate"] = {
+        "verdict": "KHONG_XUAT_TU_DONG", "block_type": "SOFT", "signal_count": 5,
+        "signals": [{"rule_id": "RF05", "rule_name": "x", "status": "KÍCH HOẠT", "observed_value": 0.62}],
+        "data_warnings": [], "reasons": ["DSCR 0,62x < 1,0x."],
+    }
+    docx_bytes, fill_log = build_mb02_docx(computed, force=True, actor="rm.nguyen")
+    doc = _reload(docx_bytes)
+    first_paragraph_text = doc.paragraphs[0].text
+    assert "BẢN NHÁP XUẤT THEO YÊU CẦU CỦA CÁN BỘ" in first_paragraph_text
+    assert fill_log["xuat_theo_force"] is True
+    assert fill_log["actor"] == "rm.nguyen"
+
+
+def test_no_banner_when_verdict_is_xuat():
+    docx_bytes, fill_log = build_mb02_docx(_make_computed())
+    doc = _reload(docx_bytes)
+    assert "BẢN NHÁP XUẤT THEO YÊU CẦU" not in doc.paragraphs[0].text

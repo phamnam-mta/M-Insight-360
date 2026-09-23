@@ -1,16 +1,19 @@
+import base64
 import datetime
+import json
 import os
+import re
 import tempfile
 import time
 import uuid
 from dataclasses import asdict
 
 from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from app.config import get_settings
 from app.engine.core.timing import narrative_budget_exceeded
-from app.engine.core.types import RuleResult
+from app.engine.core.types import Metric, RuleResult
 from app.extraction.pipeline import extract_document
 from app.storage.db import get_connection, init_db
 from app.storage.files import get_case_file_path, record_case_file, save_case_file
@@ -264,15 +267,60 @@ async def assess(
         return computed
 
 
+def _rule_result_from_dict(data: dict) -> RuleResult:
+    known = {k: v for k, v in data.items() if k in RuleResult.__dataclass_fields__}
+    return RuleResult(**known)
+
+
+def _metric_from_credit_engine(credit_engine: dict, name: str) -> Metric:
+    m = credit_engine.get(name) or {}
+    return Metric(
+        metric=name, value=m.get("value"), formula=m.get("formula", ""),
+        input_values=m.get("input_values", {}), input_sources=m.get("input_sources", {}),
+        status=m.get("status", "NEED_MORE_DATA"),
+    )
+
+
 @router.post("/export")
 async def export(payload: dict) -> Response:
-    computed = payload["computed"] if "computed" in payload else payload
-    stress_scenario = payload.get("stress_scenario") if "computed" in payload else None
-    docx_bytes = build_mb02_docx(computed, stress_scenario)
+    computed = payload.get("computed", payload)
+    force = bool(payload.get("force", False))
+    actor = payload.get("actor")
+
+    risk_flags = [_rule_result_from_dict(f) for f in computed.get("risk_flags") or [] if isinstance(f, dict)]
+    credit_engine = computed.get("credit_engine") or {}
+    dscr = _metric_from_credit_engine(credit_engine, "dscr")
+    icr = _metric_from_credit_engine(credit_engine, "icr")
+    equity_vnd = (computed.get("financial_inputs") or {}).get("equity_vnd")
+
+    gate = evaluate_export_gate(risk_flags, equity_vnd=equity_vnd, dscr=dscr, icr=icr)
+
+    if gate.verdict == "KHONG_XUAT_TU_DONG" and not force:
+        return JSONResponse(status_code=409, content={
+            "export_blocked": True,
+            "verdict": gate.verdict,
+            "block_type": gate.block_type,
+            "signal_count": gate.signal_count,
+            "reasons": gate.reasons,
+            "signals": [asdict(s) for s in gate.signals],
+        })
+
+    computed = {**computed, "export_gate": asdict(gate)}
+    docx_bytes, fill_log = build_mb02_docx(computed, force=force, actor=actor)
+
+    customer_name = (computed.get("customer_profile") or {}).get("customer_name") or "KH"
+    period = (computed.get("ho_so_period") or {}).get("selected") or "khong-xac-dinh"
+    date_str = datetime.datetime.now(datetime.UTC).strftime("%Y%m%d")
+    safe_name = re.sub(r"[^\w\-]+", "_", customer_name).strip("_") or "KH"
+    filename = f"TTTD_{safe_name}_{period}_{date_str}_BANNHAP.docx"
+
     return Response(
         content=docx_bytes,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        headers={"Content-Disposition": "attachment; filename=to-trinh-mb02-du-thao.docx"},
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "X-Fill-Log": base64.b64encode(json.dumps(fill_log, ensure_ascii=False).encode()).decode(),
+        },
     )
 
 

@@ -97,6 +97,48 @@ def test_export_endpoint_returns_docx():
     assert len(resp.content) > 0
 
 
+def test_export_blocked_returns_409_json_without_force():
+    client = TestClient(app)
+    computed = {
+        "customer_profile": {"customer_name": "ACME"},
+        "financial_inputs": {"equity_vnd": -1.0},
+        "credit_engine": {"dscr": {"value": None, "status": "NEED_MORE_DATA"}, "icr": {"value": None, "status": "NEED_MORE_DATA"}},
+        "risk_flags": [], "ho_so_period": {"selected": "2025"},
+    }
+    resp = client.post("/api/eb/export", json={"computed": computed})
+    assert resp.status_code == 409
+    body = resp.json()
+    assert body["export_blocked"] is True
+    assert body["verdict"] == "KHONG_XUAT_TU_DONG"
+
+
+def test_export_forced_returns_docx_with_bannhap_filename():
+    client = TestClient(app)
+    computed = {
+        "customer_profile": {"customer_name": "ACME"},
+        "financial_inputs": {"equity_vnd": -1.0},
+        "credit_engine": {"dscr": {"value": None, "status": "NEED_MORE_DATA"}, "icr": {"value": None, "status": "NEED_MORE_DATA"}},
+        "risk_flags": [], "ho_so_period": {"selected": "2025"},
+    }
+    resp = client.post("/api/eb/export", json={"computed": computed, "force": True})
+    assert resp.status_code == 200
+    assert "BANNHAP.docx" in resp.headers["content-disposition"]
+
+
+def test_export_never_trusts_client_supplied_verdict():
+    # Client claims XUAT despite equity <= 0 — server must recompute and
+    # still block (per this plan's Review Focus).
+    client = TestClient(app)
+    computed = {
+        "customer_profile": {"customer_name": "ACME"},
+        "financial_inputs": {"equity_vnd": -1.0},
+        "credit_engine": {"dscr": {"value": None, "status": "NEED_MORE_DATA"}, "icr": {"value": None, "status": "NEED_MORE_DATA"}},
+        "risk_flags": [], "export_gate": {"verdict": "XUAT"}, "ho_so_period": {"selected": "2025"},
+    }
+    resp = client.post("/api/eb/export", json={"computed": computed})
+    assert resp.status_code == 409
+
+
 def test_assess_endpoint_recognises_a_real_bctc_bundle_as_complete(monkeypatch, tmp_path):
     # Regression: EB's own keyword classifier matched "ma so thue" (present in
     # the header of every VN business document) as LEGAL_IDENTITY first and

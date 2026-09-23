@@ -267,7 +267,16 @@ def build_mb02_docx(computed: dict, *, force: bool = False, actor: str | None = 
         "cells": [],
     }
 
-    # Force-override banner (S7.4) added by Task 12.
+    gate = computed.get("export_gate") or {}
+    if force and gate.get("verdict") == "KHONG_XUAT_TU_DONG":
+        signal_lines = "; ".join(
+            f"{s.get('rule_name', s.get('rule_id'))}: {s.get('observed_value', '?')}"
+            for s in gate.get("signals") or []
+        ) or "; ".join(gate.get("reasons") or [])
+        banner = document.paragraphs[0].insert_paragraph_before(
+            f"[BẢN NHÁP XUẤT THEO YÊU CẦU CỦA CÁN BỘ — HỆ THỐNG KHÔNG TỰ XUẤT] {signal_lines}"
+        )
+        banner.runs[0].bold = True
 
     _fill_s2_1_customer_info(document, computed, fill_log["cells"])
     _fill_s2_2_general_metrics(document, computed, fill_log["cells"])
