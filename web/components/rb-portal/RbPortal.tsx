@@ -14,6 +14,7 @@ import { CollateralTab } from "./tabs/CollateralTab";
 import { OtherDocsTab } from "./tabs/OtherDocsTab";
 import { DocumentsTab } from "./tabs/DocumentsTab";
 import { AssessmentTab } from "./tabs/AssessmentTab";
+import { SummaryTab } from "./tabs/SummaryTab";
 import { ZaloBotModal } from "./ZaloBotModal";
 
 const TABS = [
@@ -83,7 +84,10 @@ export default function RbPortal() {
         {activeTab === "other" && caseId && <OtherDocsTab caseId={caseId} />}
         {activeTab === "documents" && caseId && <DocumentsTab caseId={caseId} />}
         {activeTab === "assessment" && caseId && <AssessmentTab caseId={caseId} />}
-        {/* Tasks 18-19 render the remaining tabs here */}
+        {activeTab === "summary" && caseId && (
+          <SummaryTab caseId={caseId} onEditSection={(tab) => setActiveTab(tab as TabKey)} />
+        )}
+        {/* Task 19 renders the remaining tab here */}
       </div>
 
       <ZaloBotModal open={zaloOpen} onClose={() => setZaloOpen(false)} />
