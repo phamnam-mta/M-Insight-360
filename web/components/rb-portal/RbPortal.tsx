@@ -6,6 +6,8 @@ import {
   ListChecks, PiggyBank, ScrollText, UploadCloud, MessageCircle,
 } from "lucide-react";
 import { OverviewTab } from "./tabs/OverviewTab";
+import { CustomerTab } from "./tabs/CustomerTab";
+import { LegalTab } from "./tabs/LegalTab";
 import { ZaloBotModal } from "./ZaloBotModal";
 
 const TABS = [
@@ -67,7 +69,9 @@ export default function RbPortal() {
         {activeTab !== "overview" && !caseId && (
           <p className="text-sm text-gray-500">Chọn hoặc tạo hồ sơ ở tab Tổng quan trước.</p>
         )}
-        {/* Tasks 13-19 render the remaining tabs here, keyed by activeTab + caseId */}
+        {activeTab === "customer" && caseId && <CustomerTab caseId={caseId} />}
+        {activeTab === "legal" && caseId && <LegalTab caseId={caseId} />}
+        {/* Tasks 14-19 render the remaining tabs here */}
       </div>
 
       <ZaloBotModal open={zaloOpen} onClose={() => setZaloOpen(false)} />
