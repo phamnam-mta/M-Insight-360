@@ -43,3 +43,23 @@ def classify_document(doc: ExtractedDocument) -> tuple[str, float]:
     if confidence < 0.3:
         return "UNCLASSIFIED", confidence
     return best_type, confidence
+
+
+def classify_document_types(doc: ExtractedDocument, min_confidence: float = 0.3) -> list[tuple[str, float]]:
+    """Multi-label variant of classify_document: every doc_type whose own
+    keyword score clears min_confidence, not just the single
+    highest-scoring one. A real upload can legitimately bundle content for
+    more than one category in one physical file (e.g. a BCTC sheet
+    alongside a bank-statement sheet with hundreds of transaction rows,
+    each repeating "ghi no"/"ghi co"/"so du") — classify_document's
+    winner-take-all scoring would let the larger sheet's keyword count
+    swamp the smaller one's and silently drop it from a mandatory-document
+    presence check."""
+    haystack = _strip_accents_lower(doc.text + " " + doc.filename)
+    matched: list[tuple[str, float]] = []
+    for doc_type, keywords in _KEYWORDS.items():
+        score = sum(1 for kw in keywords if kw in haystack)
+        confidence = min(1.0, score / 2) if score > 0 else 0.0
+        if confidence >= min_confidence:
+            matched.append((doc_type, confidence))
+    return matched

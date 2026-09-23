@@ -1,5 +1,5 @@
 from app.extraction.types import ExtractedDocument
-from app.agents.rb.document_classifier import classify_document
+from app.agents.rb.document_classifier import classify_document, classify_document_types
 
 
 def _doc(text: str, filename: str = "f.pdf") -> ExtractedDocument:
@@ -49,3 +49,23 @@ def test_loan_request_with_tax_id_header_is_not_outscored_by_tax_id_header():
     doc = _doc("Ma so thue: 0101234567\nMST: 0101234567\nGIAY DE NGHI CAP TIN DUNG\nMuc dich vay von")
     doc_type, _ = classify_document(doc)
     assert doc_type == "LOAN_REQUEST"
+
+
+def test_classify_document_types_returns_every_matching_category():
+    # A single physical file can legitimately bundle a BCTC sheet with an
+    # unrelated bank-statement sheet — both categories are genuinely
+    # present and should both be reported, not just whichever has more
+    # keyword hits.
+    doc = _doc(
+        "BAO CAO TAI CHINH NAM 2025\nBANG CAN DOI KE TOAN\nVon chu so huu: 500.000.000\n"
+        + "\n".join("Ngay GD Ghi No Ghi Co So Du" for _ in range(20))
+    )
+    types = {t for t, _ in classify_document_types(doc)}
+    assert "FINANCIAL_STATEMENT" in types
+    assert "BANK_STATEMENT" in types
+
+
+def test_classify_document_types_excludes_low_confidence_categories():
+    doc = _doc("BAO CAO TAI CHINH NAM 2025\nBANG CAN DOI KE TOAN\nVon chu so huu: 500.000.000")
+    types = {t for t, _ in classify_document_types(doc)}
+    assert types == {"FINANCIAL_STATEMENT"}

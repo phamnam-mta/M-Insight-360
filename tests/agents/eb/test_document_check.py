@@ -54,3 +54,25 @@ def test_loan_request_is_recognised_despite_tax_id_header():
 def test_irrelevant_document_leaves_all_mandatory_types_missing():
     missing = find_missing_mandatory_types([_doc("x.csv", "khong co gi lien quan")])
     assert missing == MANDATORY_DOC_TYPES
+
+
+def test_bundled_bctc_and_bank_statement_in_one_file_both_recognised():
+    # Production bug: a single upload can legitimately bundle a BCTC sheet
+    # together with an unrelated bank-statement ("sao ke") sheet — real
+    # sao ke data runs to hundreds of transaction rows, each repeating
+    # "ghi no"/"ghi co"/"so du" column headers, so a winner-take-all
+    # classifier (highest total keyword count wins the WHOLE document)
+    # lets the bank-statement keywords swamp the BCTC's own, and the
+    # document gets classified as BANK_STATEMENT only — EB then reports
+    # FINANCIAL_STATEMENT as missing even though the BCTC data is present
+    # and was correctly extracted.
+    bundled = _doc(
+        "ho_so_demo.xlsx",
+        "BAO CAO TAI CHINH NAM 2025\n"
+        "BANG CAN DOI KE TOAN\n"
+        "Von chu so huu: 580.965.107.518\n"
+        "Tai san ngan han: 293.369.838.619\n"
+        + "\n".join(f"Ngay GD Dien giai Ghi no Ghi co So du giao dich {i}" for i in range(1, 50)),
+    )
+    missing = find_missing_mandatory_types([bundled])
+    assert "FINANCIAL_STATEMENT" not in missing

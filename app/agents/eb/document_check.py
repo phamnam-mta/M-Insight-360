@@ -14,7 +14,7 @@ All this module still owns is EB's own mandatory-category list and the mapping
 from RB's finer-grained document types onto those categories.
 """
 
-from app.agents.rb.document_classifier import classify_document
+from app.agents.rb.document_classifier import classify_document_types
 from app.extraction.types import ExtractedDocument
 
 LEGAL_IDENTITY = "LEGAL_IDENTITY"
@@ -35,8 +35,17 @@ _RB_TYPES_BY_EB_CATEGORY: dict[str, set[str]] = {
 
 
 def classify_documents(documents: list[ExtractedDocument]) -> list[tuple[str, float]]:
-    """(doc_type, confidence) per document, using RB's shared classifier."""
-    return [classify_document(doc) for doc in documents]
+    """Every (doc_type, confidence) pair present across the bundle, using
+    RB's shared multi-label classifier — not one type per document. A
+    single physical upload can legitimately bundle content for more than
+    one category (e.g. a BCTC sheet alongside a bank-statement sheet with
+    hundreds of transaction rows); EB only cares whether each mandatory
+    category is present SOMEWHERE in the bundle, so a winner-take-all
+    single label per document (RB's own classify_document, used for RB's
+    own per-document display) would silently drop a real category whose
+    keyword count lost out to a larger, unrelated sheet in the same file.
+    """
+    return [t for doc in documents for t in classify_document_types(doc)]
 
 
 def find_missing_mandatory_types(documents: list[ExtractedDocument]) -> list[str]:
