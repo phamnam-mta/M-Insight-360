@@ -132,3 +132,118 @@ def test_upload_unreadable_file_marks_failed_not_500(tmp_path, monkeypatch):
     )
     assert resp.status_code == 200
     assert resp.json()["status"] == "FAILED"
+
+
+def _make_ready_case(client, monkeypatch) -> str:
+    case_id = client.post("/api/rb-portal/cases", json={"customer_name": "A", "tax_id": "111"}).json()["case_id"]
+    client.patch(f"/api/rb-portal/cases/{case_id}/customer", json={"full_name": "A"})
+    client.patch(f"/api/rb-portal/cases/{case_id}/legal", json={"id_type": "CCCD"})
+    client.patch(f"/api/rb-portal/cases/{case_id}/income", json={"source_type": "salary", "income_salary_vnd": 25_000_000})
+    client.patch(f"/api/rb-portal/cases/{case_id}/loan", json={
+        "product": "vay_von", "purpose": "tieu dung", "amount_vnd": 100_000_000,
+        "tenor_months": 12, "annual_rate": 0.1, "existing_monthly_obligation_vnd": 1_000_000,
+    })
+    return case_id
+
+
+def test_preliminary_assessment_runs_and_saves_a_version(tmp_path, monkeypatch):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    from app.config import get_settings
+    get_settings.cache_clear()
+    import app.agents.rb_portal.router as rb_portal_router
+    monkeypatch.setattr(rb_portal_router, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""})
+    client = TestClient(app)
+    case_id = _make_ready_case(client, monkeypatch)
+
+    resp = client.post(f"/api/rb-portal/cases/{case_id}/preliminary-assessment")
+    assert resp.status_code == 200
+    body = resp.json()
+    # Same reused (unmodified) credit_engine.py behavior as Task 4: dti is
+    # only computable from avg_monthly_revenue_vnd (business income), which
+    # a salary-source case never populates; dsr uses gross_monthly_income_vnd
+    # directly and IS computable here — assert on that instead (see Task 4's
+    # ledgered ruling for the full explanation).
+    assert body["credit_engine"]["dsr"]["status"] == "OK"
+
+    history = client.get(f"/api/rb-portal/cases/{case_id}/history").json()["versions"]
+    assert len(history) == 1
+    assert history[0]["kind"] == "PRELIMINARY"
+
+
+def test_full_assessment_blocked_when_mandatory_missing(tmp_path, monkeypatch):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    from app.config import get_settings
+    get_settings.cache_clear()
+    import app.agents.rb_portal.router as rb_portal_router
+    monkeypatch.setattr(rb_portal_router, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""})
+    client = TestClient(app)
+    case_id = client.post("/api/rb-portal/cases", json={"customer_name": "A", "tax_id": "111"}).json()["case_id"]
+
+    resp = client.post(f"/api/rb-portal/cases/{case_id}/full-assessment")
+    assert resp.status_code == 409
+    # FastAPI wraps a dict `detail=` under the top-level "detail" key —
+    # web/lib/rb-portal-api.ts's runFullAssessment() reads body.detail?.missing,
+    # so this must stay in sync with that shape.
+    assert resp.json()["detail"]["missing"]
+
+
+def test_full_assessment_runs_when_mandatory_satisfied(tmp_path, monkeypatch):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    from app.config import get_settings
+    get_settings.cache_clear()
+    import app.agents.rb_portal.router as rb_portal_router
+    monkeypatch.setattr(rb_portal_router, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""})
+    client = TestClient(app)
+    case_id = _make_ready_case(client, monkeypatch)
+
+    resp = client.post(f"/api/rb-portal/cases/{case_id}/full-assessment")
+    assert resp.status_code == 200
+    assert client.get(f"/api/rb-portal/cases/{case_id}").json()["status"] == "FULL_DONE"
+
+
+def test_two_preliminary_runs_create_two_history_versions(tmp_path, monkeypatch):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    from app.config import get_settings
+    get_settings.cache_clear()
+    import app.agents.rb_portal.router as rb_portal_router
+    monkeypatch.setattr(rb_portal_router, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""})
+    client = TestClient(app)
+    case_id = _make_ready_case(client, monkeypatch)
+
+    client.post(f"/api/rb-portal/cases/{case_id}/preliminary-assessment")
+    client.post(f"/api/rb-portal/cases/{case_id}/preliminary-assessment")
+    versions = client.get(f"/api/rb-portal/cases/{case_id}/history").json()["versions"]
+    assert [v["version"] for v in versions] == [2, 1]
+
+
+def test_summary_available_before_any_assessment_run(tmp_path, monkeypatch):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    from app.config import get_settings
+    get_settings.cache_clear()
+    client = TestClient(app)
+    case_id = client.post("/api/rb-portal/cases", json={"customer_name": "A", "tax_id": "111"}).json()["case_id"]
+
+    resp = client.get(f"/api/rb-portal/cases/{case_id}/summary")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["missing_data"]
+    assert body["ai_status"] == "UNAVAILABLE"
+    assert body["why"] == []
+
+
+def test_summary_reflects_latest_saved_narrative(tmp_path, monkeypatch):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    from app.config import get_settings
+    get_settings.cache_clear()
+    import app.agents.rb_portal.router as rb_portal_router
+    monkeypatch.setattr(
+        rb_portal_router, "generate_narrative",
+        lambda computed: {"why": ["DTI trong ngưỡng an toàn"], "credit_memo": "Đủ điều kiện sơ bộ."},
+    )
+    client = TestClient(app)
+    case_id = _make_ready_case(client, monkeypatch)
+    client.post(f"/api/rb-portal/cases/{case_id}/preliminary-assessment")
+
+    body = client.get(f"/api/rb-portal/cases/{case_id}/summary").json()
+    assert body["why"] == ["DTI trong ngưỡng an toàn"]
+    assert body["ai_status"] == "AVAILABLE"

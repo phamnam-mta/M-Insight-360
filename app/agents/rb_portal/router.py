@@ -1,19 +1,25 @@
 import os
 import tempfile
+import time
 import uuid
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from app.agents.rb.document_classifier import classify_document
+from app.agents.rb.narrative import generate_narrative
 from app.config import get_settings
+from app.engine.core.timing import narrative_budget_exceeded
 from app.extraction.pipeline import extract_document
 from app.storage.db import init_db
 from app.storage.files import save_case_file
 from app.storage.rb_case_repository import (
-    add_document, create_case, get_case, list_cases, list_documents,
-    update_case_section, update_case_status, update_document_status,
+    add_document, create_case, get_case, list_assessment_versions, list_cases,
+    list_documents, save_assessment_version, update_case_section,
+    update_case_status, update_document_status,
 )
-from .mandatory_check import check_mandatory  # noqa: F401  (used by later tasks in this file)
+
+from .assessment import run_case_assessment
+from .mandatory_check import check_mandatory
 
 router = APIRouter(prefix="/api/rb-portal", tags=["rb-portal"])
 
@@ -109,3 +115,114 @@ async def list_documents_endpoint(case_id: str) -> dict:
     if get_case(settings.db_path, case_id) is None:
         raise HTTPException(status_code=404, detail="Không tìm thấy hồ sơ")
     return {"documents": list_documents(settings.db_path, case_id)}
+
+
+_TOTAL_CHECKLIST_ITEMS = 6  # nominal denominator for document_overview.completion_percent
+
+
+def _run_and_maybe_narrate(case_id: str, settings, request_start: float, kind: str) -> dict:
+    case = get_case(settings.db_path, case_id)
+    documents = list_documents(settings.db_path, case_id)
+    computed = run_case_assessment(case, documents)
+
+    if narrative_budget_exceeded(request_start):
+        narrative = {"why": [], "credit_memo": ""}
+    else:
+        narrative = generate_narrative(computed)
+    computed["why"] = narrative["why"]
+    computed["credit_memo"] = narrative["credit_memo"]
+
+    save_assessment_version(settings.db_path, case_id, kind, computed)
+    return computed
+
+
+@router.post("/cases/{case_id}/preliminary-assessment")
+async def run_preliminary_assessment_endpoint(case_id: str) -> dict:
+    request_start = time.monotonic()
+    settings = get_settings()
+    init_db(settings.db_path)
+    if get_case(settings.db_path, case_id) is None:
+        raise HTTPException(status_code=404, detail="Không tìm thấy hồ sơ")
+    computed = _run_and_maybe_narrate(case_id, settings, request_start, "PRELIMINARY")
+    update_case_status(settings.db_path, case_id, "PRELIM_DONE")
+    return computed
+
+
+@router.post("/cases/{case_id}/full-assessment")
+async def run_full_assessment_endpoint(case_id: str) -> dict:
+    request_start = time.monotonic()
+    settings = get_settings()
+    init_db(settings.db_path)
+    case = get_case(settings.db_path, case_id)
+    if case is None:
+        raise HTTPException(status_code=404, detail="Không tìm thấy hồ sơ")
+    documents = list_documents(settings.db_path, case_id)
+    mandatory = check_mandatory(case.get("customer"), case.get("legal"), case.get("income"), case.get("loan"), documents)
+    if mandatory["missing"]:
+        raise HTTPException(status_code=409, detail={"missing": mandatory["missing"]})
+    computed = _run_and_maybe_narrate(case_id, settings, request_start, "FULL")
+    update_case_status(settings.db_path, case_id, "FULL_DONE")
+    return computed
+
+
+_TIMELINE_STEPS = [
+    ("RECEIVED", "Đã tiếp nhận hồ sơ"),
+    ("DOCS_ANALYZED", "Đã phân tích chứng từ"),
+    ("PRELIM_DONE", "Thẩm định sơ bộ"),
+    ("FULL_DONE", "Thẩm định đầy đủ"),
+]
+_STATUS_ORDER = [s for s, _ in _TIMELINE_STEPS]
+
+
+def _build_timeline(status: str) -> list[dict]:
+    current_index = _STATUS_ORDER.index(status) if status in _STATUS_ORDER else 0
+    return [
+        {"status": s, "label": label, "reached": i <= current_index}
+        for i, (s, label) in enumerate(_TIMELINE_STEPS)
+    ]
+
+
+@router.get("/cases/{case_id}/summary")
+async def get_summary_endpoint(case_id: str) -> dict:
+    settings = get_settings()
+    init_db(settings.db_path)
+    case = get_case(settings.db_path, case_id)
+    if case is None:
+        raise HTTPException(status_code=404, detail="Không tìm thấy hồ sơ")
+
+    documents = list_documents(settings.db_path, case_id)
+    computed = run_case_assessment(case, documents)
+
+    versions = list_assessment_versions(settings.db_path, case_id)
+    if versions:
+        latest = versions[0]["computed"]
+        why, credit_memo, ai_status = latest.get("why", []), latest.get("credit_memo", ""), "AVAILABLE"
+    else:
+        why, credit_memo, ai_status = [], "", "UNAVAILABLE"
+
+    missing_count = len(computed["mandatory_check"]["missing"])
+    completion_percent = max(0, round(100 * (_TOTAL_CHECKLIST_ITEMS - missing_count) / _TOTAL_CHECKLIST_ITEMS))
+
+    return {
+        **case,
+        **computed,
+        "document_overview": {
+            "total_documents": len(documents),
+            "completion_percent": completion_percent,
+            "missing_count": missing_count,
+        },
+        "documents": documents,
+        "timeline": _build_timeline(case["status"]),
+        "why": why,
+        "credit_memo": credit_memo,
+        "ai_status": ai_status,
+    }
+
+
+@router.get("/cases/{case_id}/history")
+async def get_history_endpoint(case_id: str) -> dict:
+    settings = get_settings()
+    init_db(settings.db_path)
+    if get_case(settings.db_path, case_id) is None:
+        raise HTTPException(status_code=404, detail="Không tìm thấy hồ sơ")
+    return {"versions": list_assessment_versions(settings.db_path, case_id)}
