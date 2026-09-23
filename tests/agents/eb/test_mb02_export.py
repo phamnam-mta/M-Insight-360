@@ -86,3 +86,41 @@ def test_s2_2_missing_field_is_placeholder_not_zero():
     table31 = next(t for t in doc.tables if t.rows[0].cells[0].text.strip() == "Chỉ tiêu" and len(t.rows) == 14)
     row = next(r for r in table31.rows if "Lợi nhuận sau thuế" in r.cells[0].text)
     assert row.cells[3].text.strip() == "[Chưa xác định từ hồ sơ tải lên]"
+
+
+def test_s2_3_fills_long_term_capital_breakdown():
+    computed = _make_computed()
+    computed["credit_engine"]["long_term_capital"] = {"value": 100_000_000_000.0, "status": "OK"}
+    computed["credit_engine"]["nwc"] = {"value": 150_000_000_000.0, "status": "OK"}
+    docx_bytes, _ = build_mb02_docx(computed)
+    doc = _reload(docx_bytes)
+    table32 = next(t for t in doc.tables if t.rows[0].cells[0].text.strip() == "Chỉ tiêu" and len(t.rows) == 6)
+    row = next(r for r in table32.rows if r.cells[0].text.strip() == "1. Nguồn vốn dài hạn")
+    assert row.cells[3].text.strip() == "100.000"
+    row = next(r for r in table32.rows if r.cells[0].text.strip() == "3. Vốn lưu động thường xuyên")
+    assert row.cells[3].text.strip() == "150.000"
+
+
+def test_s2_3_replaces_financial_health_commentary_paragraph():
+    computed = _make_computed()
+    computed["credit_engine"]["long_term_capital"] = {"value": 100_000_000_000.0, "status": "OK"}
+    computed["credit_engine"]["nwc"] = {"value": 150_000_000_000.0, "status": "OK"}
+    computed["why"] = ["Doanh thu tăng trưởng ổn định.", "Đòn bẩy ở mức an toàn."]
+    docx_bytes, _ = build_mb02_docx(computed)
+    doc = _reload(docx_bytes)
+    text = "\n".join(p.text for p in doc.paragraphs)
+    assert "Doanh thu tăng trưởng ổn định." in text
+    assert "Khuyến nghị sơ bộ từ dữ liệu BCTC" in text
+
+
+def test_s2_5_fills_nam_0_only_never_plan_years():
+    docx_bytes, _ = build_mb02_docx(_make_computed())
+    doc = _reload(docx_bytes)
+    table37 = next(
+        t for t in doc.tables
+        if len(t.rows) == 20 and len(t.columns) >= 2 and t.rows[0].cells[1].text.strip() == "Chỉ tiêu"
+    )
+    row = next(r for r in table37.rows if "Tổng doanh thu" in r.cells[1].text)
+    assert row.cells[2].text.strip() == "128.062"  # Năm 0
+    assert row.cells[3].text.strip() == ""  # Năm 1 — plan year, never written
+    assert row.cells[4].text.strip() == ""  # Năm 2 — plan year, never written

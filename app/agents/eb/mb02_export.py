@@ -187,6 +187,53 @@ def _fill_s2_2_general_metrics(document, computed: dict, fill_log: list[dict]) -
                 _set_cell_text(row.cells[col], _MISSING_PLACEHOLDER)
 
 
+def _fill_s2_3_capital_adequacy(document, computed: dict, fill_log: list[dict]) -> None:
+    table = _find_table_after_heading(document, "Các chỉ tiêu khả năng đảm bảo vốn kinh doanh")
+    if table is None:
+        fill_log.append({"field_code": "S2.3", "status": "TABLE_NOT_FOUND"})
+        return
+    fi = computed.get("financial_inputs") or {}
+    long_term_capital = _metric_value(computed, "long_term_capital")
+    nwc = _metric_value(computed, "nwc")
+    _fill_cell(table, "1. Nguồn vốn dài hạn", 3, long_term_capital, "BS_LONG_TERM_CAPITAL", fill_log)
+    _fill_cell(table, "- Vốn CSH", 3, fi.get("equity_vnd"), "BS_EQUITY", fill_log)
+    _fill_cell(table, "- Vay dài hạn", 3, fi.get("long_term_debt_vnd"), "BS_LT_BORROWINGS", fill_log)
+    _fill_cell(table, "2. Tài sản cố định và đầu tư tài chính dài hạn", 3, fi.get("non_current_assets_vnd"), "BS_NON_CURRENT_ASSETS", fill_log)
+    _fill_cell(table, "3. Vốn lưu động thường xuyên", 3, nwc, "CALC_NWC", fill_log)
+
+    for row in table.rows[1:]:
+        for col in (1, 2):
+            if row.cells[col].text.strip() == "":
+                _set_cell_text(row.cells[col], _MISSING_PLACEHOLDER)
+
+    target = _nfc("Nhận xét, đánh giá về sức khỏe tài chính")
+    for paragraph in document.paragraphs:
+        if target in _nfc(paragraph.text):
+            why = computed.get("why") or []
+            commentary = " ".join(why) if why else "Chưa có nhận định — hồ sơ chưa đủ dữ liệu để đưa kết luận thẩm định."
+            new_text = f"{commentary} {DISCLAIMER}"
+            if paragraph.runs:
+                paragraph.runs[0].text = new_text
+                for run in paragraph.runs[1:]:
+                    run.text = ""
+            else:
+                paragraph.add_run(new_text)
+            fill_log.append({"field_code": "S2.3_COMMENTARY", "status": "FILLED"})
+            break
+
+
+def _fill_s2_5_business_plan(document, computed: dict, fill_log: list[dict]) -> None:
+    table = _find_table_after_heading(document, "Kế hoạch kinh doanh")
+    if table is None:
+        fill_log.append({"field_code": "S2.5", "status": "TABLE_NOT_FOUND"})
+        return
+    fi = computed.get("financial_inputs") or {}
+    _fill_cell(table, "Tổng doanh thu", 2, fi.get("net_revenue_vnd"), "IS_REVENUE", fill_log, label_col=1)
+    _fill_cell(table, "Lợi nhuận trước thuế (3)= (2)- (1)", 2, fi.get("pbt_vnd"), "IS_PBT", fill_log, label_col=1)
+    _fill_cell(table, "Chi phí khấu hao", 2, fi.get("depreciation_vnd"), "IS_DEPRECIATION", fill_log, label_col=1)
+    _fill_cell(table, "Chi phí lãi vay vốn", 2, fi.get("interest_expense_vnd"), "IS_INTEREST", fill_log, label_col=1)
+
+
 def build_mb02_docx(computed: dict, *, force: bool = False, actor: str | None = None) -> tuple[bytes, dict]:
     computed = computed or {}
     document = docx.Document(str(_TEMPLATE_PATH))
@@ -201,8 +248,9 @@ def build_mb02_docx(computed: dict, *, force: bool = False, actor: str | None = 
 
     _fill_s2_1_customer_info(document, computed, fill_log["cells"])
     _fill_s2_2_general_metrics(document, computed, fill_log["cells"])
-    # Further S2.x fill calls added by Tasks 10-11 go here, each appending
-    # to fill_log["cells"].
+    _fill_s2_3_capital_adequacy(document, computed, fill_log["cells"])
+    _fill_s2_5_business_plan(document, computed, fill_log["cells"])
+    # S2.4 fill call added by Task 11 goes here.
 
     buffer = io.BytesIO()
     document.save(buffer)
