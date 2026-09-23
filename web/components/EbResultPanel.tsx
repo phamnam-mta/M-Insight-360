@@ -106,26 +106,34 @@ function EvidenceCell({ row, caseId }: { row: ConditionRow; caseId?: string }) {
 function OverviewTable({ rows, caseId }: { rows: ConditionRow[]; caseId?: string }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-sm border-collapse">
+      <table className="w-full min-w-[900px] text-sm border-collapse table-fixed">
+        <colgroup>
+          <col className="w-[14%]" />
+          <col className="w-[14%]" />
+          <col className="w-[18%]" />
+          <col className="w-[8%]" />
+          <col className="w-[24%]" />
+          <col className="w-[22%]" />
+        </colgroup>
         <thead>
           <tr className="text-left border-b border-gray-200 text-gray-500">
-            <th className="py-2 px-2 font-semibold">Tên điều kiện</th>
-            <th className="py-2 px-2 font-semibold">Giá trị/hiện trạng thực tế</th>
-            <th className="py-2 px-2 font-semibold">Điều kiện đối chiếu</th>
-            <th className="py-2 px-2 font-semibold">Kết quả</th>
-            <th className="py-2 px-2 font-semibold">Nguồn chứng cứ và ngày dữ liệu</th>
-            <th className="py-2 px-2 font-semibold">Lý do/chứng từ còn thiếu</th>
+            <th className="py-2 px-2 font-semibold break-words">Tên điều kiện</th>
+            <th className="py-2 px-2 font-semibold break-words">Giá trị/hiện trạng thực tế</th>
+            <th className="py-2 px-2 font-semibold break-words">Điều kiện đối chiếu</th>
+            <th className="py-2 px-2 font-semibold break-words">Kết quả</th>
+            <th className="py-2 px-2 font-semibold break-words">Nguồn chứng cứ và ngày dữ liệu</th>
+            <th className="py-2 px-2 font-semibold break-words">Lý do/chứng từ còn thiếu</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((row) => (
             <tr key={row.condition_id} className="border-b border-gray-100 align-top hover:bg-gray-50/60">
-              <td className="py-2.5 px-2 font-medium text-msb-navy">{row.condition_name}</td>
-              <td className="py-2.5 px-2">{formatObservedValue(row)}</td>
-              <td className="py-2.5 px-2 text-gray-600">{row.compare_rule}</td>
-              <td className="py-2.5 px-2"><ResultBadge result={row.result} /></td>
-              <td className="py-2.5 px-2"><EvidenceCell row={row} caseId={caseId} /></td>
-              <td className="py-2.5 px-2 text-gray-600">{row.reason_if_incomplete ?? "—"}</td>
+              <td className="py-2.5 px-2 font-medium text-msb-navy break-words">{row.condition_name}</td>
+              <td className="py-2.5 px-2 break-words">{formatObservedValue(row)}</td>
+              <td className="py-2.5 px-2 text-gray-600 break-words">{row.compare_rule}</td>
+              <td className="py-2.5 px-2 break-words"><ResultBadge result={row.result} /></td>
+              <td className="py-2.5 px-2 break-words"><EvidenceCell row={row} caseId={caseId} /></td>
+              <td className="py-2.5 px-2 text-gray-600 break-words">{row.reason_if_incomplete ?? "—"}</td>
             </tr>
           ))}
         </tbody>
@@ -218,9 +226,9 @@ export default function EbResultPanel({
         banner={result.overall_conclusion}
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr_340px] gap-5 mt-5">
+      <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr_340px] gap-5 mt-5 min-w-0">
         {/* Cột trái — Hồ sơ & dữ liệu gốc */}
-        <div className="space-y-5 order-4 lg:order-1">
+        <div className="space-y-5 order-4 lg:order-1 min-w-0">
           <CompanyInfoBlock result={result} onPeriodChange={(y) => onRerunWithPeriod?.(y)} />
           <FinancialDataTable
             creditEngine={result.credit_engine as Record<string, MetricValue> | undefined}
@@ -229,7 +237,7 @@ export default function EbResultPanel({
         </div>
 
         {/* Cột giữa — Sức khỏe tài chính & quyết định tín dụng */}
-        <div className="space-y-5 order-2">
+        <div className="space-y-5 order-2 min-w-0">
           <div className="bg-white rounded-xl border border-gray-100 p-6 space-y-3">
             <SectionHeader
               icon={ClipboardList}
@@ -247,7 +255,7 @@ export default function EbResultPanel({
           </div>
 
           {result.credit_engine && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {Object.entries(result.credit_engine)
                 .filter(([key]) => key in EXTENDED_METRIC_LABELS)
                 .map(([key, metric]) => {
@@ -285,7 +293,7 @@ export default function EbResultPanel({
         </div>
 
         {/* Cột phải — M-Insight AI & bán chéo */}
-        <div className="space-y-5 order-3">
+        <div className="space-y-5 order-3 min-w-0">
           <AiInsightSection why={result.why ?? []} creditMemo={result.credit_memo} title="M-Insight AI" />
 
           <div className="bg-white rounded-xl border border-gray-100 p-5 flex flex-wrap gap-2">

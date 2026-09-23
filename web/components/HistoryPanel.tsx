@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { History } from "lucide-react";
-import { AssessmentResult, HistoryItem, fetchHistory, loadHistoryItemsLocally } from "@/lib/api";
+import { History, Loader2 } from "lucide-react";
+import { AssessmentResult, HistoryItem, HistoryRunStatus, fetchHistory, loadHistoryItemsLocally } from "@/lib/api";
 
 type Props = {
   agentType: "rb" | "eb" | "crosssell";
@@ -10,26 +10,25 @@ type Props = {
   refreshKey?: number;
 };
 
-const STATUS_LABEL: Record<string, string> = {
-  READY: "Sẵn sàng",
-  READY_WITH_CONDITIONS: "Sẵn sàng có điều kiện",
-  MANUAL_REVIEW_REQUIRED: "Cần thẩm định thủ công",
-  NOT_READY: "Thiếu hồ sơ",
-  OK: "OK",
-  WARN: "Cảnh báo",
-  BLOCK: "Chặn",
-  ok: "OK",
-  partial: "Một phần",
-  blocked: "Chặn",
-  error: "Lỗi",
+// The badge shows whether the assessment RUN itself succeeded — not the
+// credit decision it produced (that lives inside the result panel's own
+// banner). A row with no run_status is a legacy entry written before this
+// tracking existed; it only ever got written on success, so it reads as one.
+const RUN_STATUS_LABEL: Record<HistoryRunStatus, string> = {
+  processing: "Đang xử lý",
+  success: "Thành công",
+  failed: "Thất bại",
 };
 
-function statusOf(item: HistoryItem): string {
-  const readiness = item.result?.credit_readiness;
-  const crosssellStatus = item.result?.status;
-  const raw = readiness ?? crosssellStatus;
-  if (!raw) return "—";
-  return STATUS_LABEL[raw] ?? raw;
+const RUN_STATUS_STYLE: Record<HistoryRunStatus, string> = {
+  processing: "bg-amber-100 text-amber-700",
+  success: "bg-green-100 text-green-700",
+  failed: "bg-red-100 text-red-700",
+};
+
+function statusOf(item: HistoryItem): { status: HistoryRunStatus; label: string; style: string } {
+  const status = item.run_status ?? "success";
+  return { status, label: RUN_STATUS_LABEL[status], style: RUN_STATUS_STYLE[status] };
 }
 
 function formatDate(iso: string): string {
@@ -98,22 +97,41 @@ export default function HistoryPanel({ agentType, onSelect, refreshKey }: Props)
       )}
       {items.length > 0 && (
         <ul className="divide-y">
-          {items.map((item) => (
-            <li key={item.id} className="py-2 flex items-center justify-between gap-3">
-              <button
-                onClick={() => onSelect(item.result)}
-                className="text-left flex-1 hover:bg-msb-bg rounded-lg px-2 py-1 -mx-2 transition-colors"
-              >
+          {items.map((item) => {
+            const { status, label, style } = statusOf(item);
+            const clickable = status === "success";
+            const body = (
+              <>
                 <p className="text-sm font-medium text-msb-navy">{item.customer_name}</p>
                 <p className="text-xs text-gray-500">
                   MST {item.tax_id} · {formatDate(item.created_at)}
                 </p>
-              </button>
-              <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-msb-bg text-msb-navy shrink-0">
-                {statusOf(item)}
-              </span>
-            </li>
-          ))}
+                {status === "failed" && item.error_message && (
+                  <p className="text-xs text-red-600 mt-0.5 break-words">{item.error_message}</p>
+                )}
+              </>
+            );
+            return (
+              <li key={item.id} className="py-2 flex items-center justify-between gap-3">
+                {clickable ? (
+                  <button
+                    onClick={() => onSelect(item.result)}
+                    className="text-left flex-1 min-w-0 hover:bg-msb-bg rounded-lg px-2 py-1 -mx-2 transition-colors"
+                  >
+                    {body}
+                  </button>
+                ) : (
+                  <div className="text-left flex-1 min-w-0 px-2 py-1 -mx-2">{body}</div>
+                )}
+                <span
+                  className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full shrink-0 ${style}`}
+                >
+                  {status === "processing" && <Loader2 className="h-3 w-3 animate-spin" />}
+                  {label}
+                </span>
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>

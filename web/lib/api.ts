@@ -291,6 +291,14 @@ export function evidenceFileUrl(caseId: string, fileId: string): string {
 }
 
 
+// The run's own execution status — did the API call succeed, fail, or is it
+// still in flight — distinct from credit_readiness (a decision ABOUT a
+// completed assessment). A "processing" row exists only for the lifetime of
+// its own in-flight request; "failed" rows are never surfaced today except
+// through this history list, since a failed call previously vanished with
+// nothing recorded.
+export type HistoryRunStatus = "processing" | "success" | "failed";
+
 export type HistoryItem = {
   id: number;
   agent_type: string;
@@ -298,6 +306,8 @@ export type HistoryItem = {
   tax_id: string;
   result: AssessmentResult;
   created_at: string;
+  run_status?: HistoryRunStatus;
+  error_message?: string;
 };
 
 export async function fetchHistory(
@@ -324,27 +334,54 @@ function localHistoryKey(agentType: "rb" | "eb" | "crosssell"): string {
   return `${LOCAL_HISTORY_KEY_PREFIX}${agentType}`;
 }
 
-export function saveHistoryItemLocally(
+// Records a run the moment it starts, as "processing" — so a request that
+// later fails still leaves a trace, instead of silently vanishing the way a
+// failed assessment previously did. Returns the entry's id (-1 if storage is
+// unavailable) for the caller to pass back into finishHistoryPlaceholder.
+export function startHistoryPlaceholder(
   agentType: "rb" | "eb" | "crosssell",
   customerName: string,
-  taxId: string,
-  result: AssessmentResult
-): void {
+  taxId: string
+): number {
   try {
+    const id = Date.now();
     const item: HistoryItem = {
-      id: Date.now(),
+      id,
       agent_type: agentType,
       customer_name: customerName,
       tax_id: taxId,
-      result,
+      result: {},
       created_at: new Date().toISOString(),
+      run_status: "processing",
     };
     const existing = loadHistoryItemsLocally(agentType);
     const updated = [item, ...existing].slice(0, LOCAL_HISTORY_MAX_ITEMS);
     localStorage.setItem(localHistoryKey(agentType), JSON.stringify(updated));
+    return id;
   } catch {
     // Private browsing, blocked storage, or quota exceeded — history simply
     // won't survive a refresh in that case; never break the assessment flow.
+    return -1;
+  }
+}
+
+export function finishHistoryPlaceholder(
+  agentType: "rb" | "eb" | "crosssell",
+  id: number,
+  outcome: { status: "success"; result: AssessmentResult } | { status: "failed"; errorMessage: string }
+): void {
+  if (id < 0) return;
+  try {
+    const items = loadHistoryItemsLocally(agentType);
+    const updated = items.map((item) => {
+      if (item.id !== id) return item;
+      return outcome.status === "success"
+        ? { ...item, result: outcome.result, run_status: "success" as const }
+        : { ...item, run_status: "failed" as const, error_message: outcome.errorMessage };
+    });
+    localStorage.setItem(localHistoryKey(agentType), JSON.stringify(updated));
+  } catch {
+    // best-effort — see startHistoryPlaceholder.
   }
 }
 

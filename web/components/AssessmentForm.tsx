@@ -6,8 +6,15 @@ import { AssessmentResult, runAssessment } from "@/lib/api";
 
 type Props = {
   agentType: "rb" | "eb" | "crosssell";
-  onResult: (result: AssessmentResult) => void;
+  onResult: (result: AssessmentResult, historyId?: number) => void;
   onSubmitted?: (files: File[], customerName: string, taxId: string) => void;
+  // Called synchronously right as the request starts; returns the id of a
+  // history placeholder row the caller created, threaded back through
+  // onResult/onError so the same row gets updated rather than a new one
+  // created (avoids depending on component state, which would go stale
+  // across the request's async gap).
+  onStart?: (customerName: string, taxId: string) => number | void;
+  onError?: (message: string, historyId?: number) => void;
 };
 
 const CROSSSELL_FIELDS: Array<{ key: string; label: string }> = [
@@ -23,7 +30,7 @@ const EB_FIELDS: Array<{ key: string; label: string }> = [
   { key: "eligible_contract_value_vnd", label: "Giá trị hợp đồng đủ điều kiện (VND)" },
 ];
 
-export default function AssessmentForm({ agentType, onResult, onSubmitted }: Props) {
+export default function AssessmentForm({ agentType, onResult, onSubmitted, onStart, onError }: Props) {
   const [customerName, setCustomerName] = useState("");
   const [taxId, setTaxId] = useState("");
   const [files, setFiles] = useState<File[]>([]);
@@ -40,6 +47,8 @@ export default function AssessmentForm({ agentType, onResult, onSubmitted }: Pro
     setLoading(true);
     setError(null);
     onSubmitted?.(files, customerName, taxId);
+    const historyId = onStart?.(customerName, taxId);
+    const historyIdArg = typeof historyId === "number" ? historyId : undefined;
     try {
       const result = await runAssessment(
         agentType,
@@ -48,9 +57,11 @@ export default function AssessmentForm({ agentType, onResult, onSubmitted }: Pro
         files,
         agentType === "crosssell" ? crosssellFields : agentType === "eb" ? ebFields : undefined
       );
-      onResult(result);
+      onResult(result, historyIdArg);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Đã xảy ra lỗi không xác định");
+      const message = err instanceof Error ? err.message : "Đã xảy ra lỗi không xác định";
+      setError(message);
+      onError?.(message, historyIdArg);
     } finally {
       setLoading(false);
     }

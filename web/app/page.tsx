@@ -7,7 +7,7 @@ import EbResultPanel from "@/components/EbResultPanel";
 import HistoryPanel from "@/components/HistoryPanel";
 import ResultPanel from "@/components/ResultPanel";
 import CrossSellPanel from "@/components/CrossSellPanel";
-import { AssessmentResult, runAssessment, saveHistoryItemLocally } from "@/lib/api";
+import { AssessmentResult, finishHistoryPlaceholder, runAssessment, startHistoryPlaceholder } from "@/lib/api";
 
 const TAB_LABELS: Record<"rb" | "eb" | "crosssell", string> = {
   rb: "RB",
@@ -59,32 +59,45 @@ export default function Home() {
         </div>
 
         <div className="relative px-6 py-6 md:py-7 max-w-5xl mx-auto">
-          <div className="flex items-center justify-between gap-4 mb-4">
-            <Image
-              src="/msb-logo-color.svg"
-              alt="MSB"
-              width={72}
-              height={18}
-              className="shrink-0"
-              priority
-            />
-            <p className="text-right text-[11px] leading-tight text-gray-400 hidden sm:block">
-              Smarter Data
-              <br />
-              Bigger Opportunities
-            </p>
+          <div className="flex items-center justify-between gap-4 mb-5">
+            <div className="flex items-center gap-3 min-w-0">
+              <Image
+                src="/mi360-logo.jpg"
+                alt="MI360"
+                width={52}
+                height={52}
+                className="shrink-0 rounded-2xl shadow-sm ring-1 ring-black/5"
+                priority
+              />
+              <div className="min-w-0 leading-tight">
+                <p className="text-sm font-extrabold text-msb-navy tracking-tight">MI360</p>
+                <p className="text-[10px] text-gray-400">M-Insight 360</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 shrink-0">
+              <p className="text-right text-[11px] leading-tight text-gray-400 hidden sm:block">
+                Smarter Data
+                <br />
+                Bigger Opportunities
+              </p>
+              <Image
+                src="/msb-logo-color.svg"
+                alt="MSB"
+                width={60}
+                height={15}
+                className="shrink-0"
+              />
+            </div>
           </div>
           <div className="min-w-0">
             <p className="text-[11px] font-semibold tracking-widest text-msb-orange uppercase">
-              Hệ thống quản lý công tác
+              Nền tảng MI360
             </p>
             <h1 className="text-xl md:text-2xl font-bold text-msb-navy leading-snug mt-1">
-              Trợ lý thẩm định tín dụng
-              <br className="hidden sm:block" /> Toàn diện MSB
+              Khai thác Dòng tiền &amp; Thẩm định Tín dụng toàn diện
             </h1>
-            <p className="text-xs text-gray-500 mt-2 max-w-2xl leading-relaxed">
-              Thẩm định Tín dụng KHDN (EB) &amp; KHCN (RB) Hộ kinh doanh · Tự động bóc tách BCTC, tính
-              NWC, DSCR, ICR, Cross-sell và xuất Tờ trình chỉ trong vài giây.
+            <p className="text-xs md:text-sm text-msb-orange font-semibold mt-2 max-w-2xl leading-relaxed">
+              Thẩm định nhanh hơn – cảnh báo sớm hơn – bán chéo thông minh hơn
             </p>
           </div>
         </div>
@@ -114,14 +127,22 @@ export default function Home() {
 
         <AssessmentForm
           agentType={tab}
-          onResult={(r) => {
+          onStart={(customerName, taxId) => {
+            const id = startHistoryPlaceholder(tab, customerName, taxId);
+            setHistoryRefreshKey((k) => k + 1);
+            return id;
+          }}
+          onResult={(r, historyId) => {
             setResult(r);
-            saveHistoryItemLocally(
-              tab,
-              (r.customer_profile?.customer_name as string) ?? "",
-              (r.customer_profile?.tax_id as string) ?? "",
-              r
-            );
+            if (historyId !== undefined) {
+              finishHistoryPlaceholder(tab, historyId, { status: "success", result: r });
+            }
+            setHistoryRefreshKey((k) => k + 1);
+          }}
+          onError={(message, historyId) => {
+            if (historyId !== undefined) {
+              finishHistoryPlaceholder(tab, historyId, { status: "failed", errorMessage: message });
+            }
             setHistoryRefreshKey((k) => k + 1);
           }}
           onSubmitted={

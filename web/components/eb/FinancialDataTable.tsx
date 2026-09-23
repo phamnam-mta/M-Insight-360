@@ -58,7 +58,11 @@ export function FinancialDataTable({
       {groups.map((group) => (
         <div key={group}>
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1.5">{group}</p>
-          <table className="w-full text-sm">
+          <table className="w-full text-sm table-fixed">
+            <colgroup>
+              <col className="w-[56%]" />
+              <col className="w-[44%]" />
+            </colgroup>
             <tbody>
               {Object.entries(FIELD_CODES)
                 .filter(([, meta]) => meta.group === group)
@@ -67,7 +71,7 @@ export function FinancialDataTable({
                   const hasValue = typeof value === "number";
                   return (
                     <tr key={key} className="border-b border-gray-50 last:border-0">
-                      <td className="py-2 pr-2 align-top">
+                      <td className="py-2 pr-2 align-top break-words">
                         <button
                           className="text-left"
                           title={meta.formula}
@@ -78,7 +82,7 @@ export function FinancialDataTable({
                         </button>
                         {openRow === key && <p className="text-[11px] text-gray-500 mt-1">{meta.formula}</p>}
                       </td>
-                      <td className="py-2 text-right align-top">
+                      <td className="py-2 text-right align-top break-words">
                         <span className={hasValue ? "text-msb-navy font-medium" : "text-gray-400"}>
                           {hasValue ? formatVndSmart(value) : "Chưa xác định từ hồ sơ tải lên"}
                         </span>
