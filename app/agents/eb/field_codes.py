@@ -12,30 +12,8 @@ spec's gap analysis marks capital_structure.py as already conforming);
 BS_LT_BORROWINGS maps to `long_term_debt_vnd` to match the existing,
 working formula, and BS_LT_LIABILITIES maps to None."""
 
+from .canonical import FIELD_CODE_MAP  # noqa: F401 — re-exported; owned by canonical.py (Bước 0C)
 from .financial_inputs import EbFinancialInputs
-
-FIELD_CODE_MAP: dict[str, str | None] = {
-    "IS_REVENUE": "net_revenue_vnd",
-    "IS_COGS": "cogs_vnd",
-    "IS_PBT": "pbt_vnd",
-    "IS_PAT": "pat_vnd",
-    "IS_INTEREST": "interest_expense_vnd",
-    "IS_DEPRECIATION": "depreciation_vnd",
-    "BS_CURRENT_ASSETS": "current_assets_vnd",
-    "BS_CURRENT_LIABILITIES": "current_liabilities_vnd",
-    "BS_NON_CURRENT_ASSETS": "non_current_assets_vnd",
-    "BS_TOTAL_ASSETS": None,  # computed — see compute_total_assets_vnd
-    "BS_EQUITY": "equity_vnd",
-    "BS_CHARTER_CAPITAL": "charter_capital_vnd",
-    "BS_LT_LIABILITIES": None,  # see module docstring
-    "BS_LT_BORROWINGS": "long_term_debt_vnd",
-    "BS_ST_BORROWINGS": "short_term_debt_vnd",
-    "BS_AR_CUSTOMER": "receivables_vnd",
-    "BS_INVENTORY": "inventory_vnd",
-    "BS_AP_SUPPLIER": "payables_vnd",
-    "BS_CASH": "cash_vnd",
-    "DEBT_PRINCIPAL_DUE": "principal_due_vnd",
-}
 
 
 def compute_total_assets_vnd(inputs: EbFinancialInputs) -> float | None:

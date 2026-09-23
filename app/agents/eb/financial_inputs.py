@@ -37,6 +37,7 @@ class EbFinancialInputs:
     total_principal_due_vnd: float | None = None
     cogs_vnd: float | None = None
     charter_capital_vnd: float | None = None
+    gross_profit_vnd: float | None = None
 
 
 @dataclass
