@@ -247,3 +247,38 @@ def test_summary_reflects_latest_saved_narrative(tmp_path, monkeypatch):
     body = client.get(f"/api/rb-portal/cases/{case_id}/summary").json()
     assert body["why"] == ["DTI trong ngưỡng an toàn"]
     assert body["ai_status"] == "AVAILABLE"
+
+
+def test_export_mb01a_returns_docx_bytes(tmp_path, monkeypatch):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    from app.config import get_settings
+    get_settings.cache_clear()
+    client = TestClient(app)
+    case_id = client.post("/api/rb-portal/cases", json={"customer_name": "NGUYEN VAN A", "tax_id": "111"}).json()["case_id"]
+    client.patch(f"/api/rb-portal/cases/{case_id}/customer", json={"full_name": "NGUYEN VAN A"})
+
+    resp = client.post(f"/api/rb-portal/cases/{case_id}/export/mb01a")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == (
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+    assert len(resp.content) > 0
+
+
+def test_export_mb01a_404_for_unknown_case(tmp_path, monkeypatch):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    from app.config import get_settings
+    get_settings.cache_clear()
+    client = TestClient(app)
+    resp = client.post("/api/rb-portal/cases/RB-NOPE/export/mb01a")
+    assert resp.status_code == 404
+
+
+def test_zalo_qr_endpoint_returns_placeholder(tmp_path, monkeypatch):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    from app.config import get_settings
+    get_settings.cache_clear()
+    client = TestClient(app)
+    resp = client.get("/api/rb-portal/zalo-bot/qr")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "NOT_CONNECTED"

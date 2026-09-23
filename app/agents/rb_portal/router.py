@@ -2,8 +2,9 @@ import os
 import tempfile
 import time
 import uuid
+from urllib.parse import quote
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile
 
 from app.agents.rb.document_classifier import classify_document
 from app.agents.rb.narrative import generate_narrative
@@ -20,6 +21,8 @@ from app.storage.rb_case_repository import (
 
 from .assessment import run_case_assessment
 from .mandatory_check import check_mandatory
+from .mb01a_export import build_mb01a_docx
+from .zalo import get_zalo_qr_status
 
 router = APIRouter(prefix="/api/rb-portal", tags=["rb-portal"])
 
@@ -226,3 +229,37 @@ async def get_history_endpoint(case_id: str) -> dict:
     if get_case(settings.db_path, case_id) is None:
         raise HTTPException(status_code=404, detail="Không tìm thấy hồ sơ")
     return {"versions": list_assessment_versions(settings.db_path, case_id)}
+
+
+# The exact filename the RM sees on download — a hard requirement from the
+# original brief ("exact downloaded filename"), not a plan-time choice, so
+# it stays literal (no case_id suffix) even though that means re-downloading
+# overwrites the previous file locally. filename* (RFC 5987) carries the
+# real Vietnamese diacritics; filename is the ASCII fallback for clients
+# that don't parse filename*.
+_MB01A_EXPORT_FILENAME = "MB01A QT.RR.038 (lần 3).docx"
+_MB01A_EXPORT_FILENAME_ASCII = "MB01A QT.RR.038 (lan 3).docx"
+
+
+@router.post("/cases/{case_id}/export/mb01a")
+async def export_mb01a_endpoint(case_id: str) -> Response:
+    settings = get_settings()
+    init_db(settings.db_path)
+    case = get_case(settings.db_path, case_id)
+    if case is None:
+        raise HTTPException(status_code=404, detail="Không tìm thấy hồ sơ")
+    docx_bytes = build_mb01a_docx(case)
+    disposition = (
+        f'attachment; filename="{_MB01A_EXPORT_FILENAME_ASCII}"; '
+        f"filename*=UTF-8''{quote(_MB01A_EXPORT_FILENAME)}"
+    )
+    return Response(
+        content=docx_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": disposition},
+    )
+
+
+@router.get("/zalo-bot/qr")
+async def get_zalo_qr_endpoint() -> dict:
+    return get_zalo_qr_status()
