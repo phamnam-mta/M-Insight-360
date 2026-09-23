@@ -12,6 +12,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
+COPY docs/templates ./docs/templates
 COPY --from=web-build /web/out ./web/out
 
 EXPOSE 8080
