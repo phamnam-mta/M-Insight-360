@@ -64,3 +64,37 @@ def test_ebit_forced_non_positive_after_stress_keeps_icr_need_more_data_not_nega
     inputs.pbt_vnd = 10_000_000  # EBIT before = 60M
     result = run_stress_test(inputs, ebit_pct=-200)  # after EBIT <= 0
     assert result["after"]["icr"]["status"] == "NEED_MORE_DATA"
+
+
+def test_p2_thi_trong_preset_matches_instruction_percentages():
+    # P2 — Thận trọng: doanh thu -10%, EBIT -15%, lãi vay +15%
+    from app.agents.eb.financial_inputs import EbFinancialInputs
+
+    inputs = EbFinancialInputs(
+        net_revenue_vnd=1_000_000_000, pbt_vnd=200_000_000, interest_expense_vnd=50_000_000,
+        pat_vnd=160_000_000, depreciation_vnd=20_000_000,
+        principal_due_vnd=100_000_000, interest_due_vnd=50_000_000,
+    )
+    result = run_stress_test(inputs, revenue_pct=-10, ebit_pct=-15, interest_pct=15)
+    assert result["after"]["revenue"] == 900_000_000.0
+
+
+def test_dscr_buffer_measured_against_1_0x():
+    from app.agents.eb.financial_inputs import EbFinancialInputs
+
+    inputs = EbFinancialInputs(
+        pat_vnd=1_000_000_000, depreciation_vnd=200_000_000,
+        interest_due_vnd=200_000_000, principal_due_vnd=1_000_000_000,
+    )
+    result = run_stress_test(inputs)
+    if "dscr_buffer" in result["buffers"]:
+        assert round(result["after"]["dscr"]["value"] - 1.0, 4) == result["buffers"]["dscr_buffer"]
+
+
+def test_icr_buffer_measured_against_1_5x():
+    from app.agents.eb.financial_inputs import EbFinancialInputs
+
+    inputs = EbFinancialInputs(pbt_vnd=1_000_000_000, interest_expense_vnd=200_000_000)
+    result = run_stress_test(inputs)
+    if "icr_buffer" in result["buffers"]:
+        assert result["after"]["icr"]["value"] - 1.5 == result["buffers"]["icr_buffer"]
