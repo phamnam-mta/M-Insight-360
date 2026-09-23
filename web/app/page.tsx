@@ -2,14 +2,12 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import dynamic from "next/dynamic";
 import AssessmentForm from "@/components/AssessmentForm";
 import EbResultPanel from "@/components/EbResultPanel";
 import HistoryPanel from "@/components/HistoryPanel";
+import ResultPanel from "@/components/ResultPanel";
 import CrossSellPanel from "@/components/CrossSellPanel";
 import { AssessmentResult, finishHistoryPlaceholder, runAssessment, startHistoryPlaceholder } from "@/lib/api";
-
-const RbPortal = dynamic(() => import("@/components/rb-portal/RbPortal"), { ssr: false });
 
 const TAB_LABELS: Record<"rb" | "eb" | "crosssell", string> = {
   rb: "RB",
@@ -127,41 +125,36 @@ export default function Home() {
           ))}
         </div>
 
-        {tab === "rb" ? (
-          <RbPortal />
-        ) : (
-          <>
-            <AssessmentForm
-              agentType={tab}
-              onStart={(customerName, taxId) => {
-                const id = startHistoryPlaceholder(tab, customerName, taxId);
-                setHistoryRefreshKey((k) => k + 1);
-                return id;
-              }}
-              onResult={(r, historyId) => {
-                setResult(r);
-                if (historyId !== undefined) {
-                  finishHistoryPlaceholder(tab, historyId, { status: "success", result: r });
-                }
-                setHistoryRefreshKey((k) => k + 1);
-              }}
-              onError={(message, historyId) => {
-                if (historyId !== undefined) {
-                  finishHistoryPlaceholder(tab, historyId, { status: "failed", errorMessage: message });
-                }
-                setHistoryRefreshKey((k) => k + 1);
-              }}
-              onSubmitted={
-                tab === "eb"
-                  ? (files, customerName, taxId) => setLastEbFiles({ files, customerName, taxId })
-                  : undefined
-              }
-            />
-            <HistoryPanel agentType={tab} onSelect={setResult} refreshKey={historyRefreshKey} />
-            {result && tab === "crosssell" && <CrossSellPanel result={result} />}
-            {result && tab === "eb" && <EbResultPanel result={result} onRerunWithPeriod={handleRerunWithPeriod} />}
-          </>
-        )}
+        <AssessmentForm
+          agentType={tab}
+          onStart={(customerName, taxId) => {
+            const id = startHistoryPlaceholder(tab, customerName, taxId);
+            setHistoryRefreshKey((k) => k + 1);
+            return id;
+          }}
+          onResult={(r, historyId) => {
+            setResult(r);
+            if (historyId !== undefined) {
+              finishHistoryPlaceholder(tab, historyId, { status: "success", result: r });
+            }
+            setHistoryRefreshKey((k) => k + 1);
+          }}
+          onError={(message, historyId) => {
+            if (historyId !== undefined) {
+              finishHistoryPlaceholder(tab, historyId, { status: "failed", errorMessage: message });
+            }
+            setHistoryRefreshKey((k) => k + 1);
+          }}
+          onSubmitted={
+            tab === "eb"
+              ? (files, customerName, taxId) => setLastEbFiles({ files, customerName, taxId })
+              : undefined
+          }
+        />
+        <HistoryPanel agentType={tab} onSelect={setResult} refreshKey={historyRefreshKey} />
+        {result && tab === "crosssell" && <CrossSellPanel result={result} />}
+        {result && tab === "eb" && <EbResultPanel result={result} onRerunWithPeriod={handleRerunWithPeriod} />}
+        {result && tab === "rb" && <ResultPanel result={result} />}
       </div>
 
       <footer className="text-center text-xs text-msb-navy/60 py-6">
