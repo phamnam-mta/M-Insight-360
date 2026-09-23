@@ -23,11 +23,13 @@ def health() -> dict:
 from .agents.rb.router import router as rb_router  # noqa: E402
 from .agents.eb.router import router as eb_router  # noqa: E402
 from .agents.crosssell.router import router as crosssell_router  # noqa: E402
+from .agents.rb_portal.router import router as rb_portal_router  # noqa: E402
 from .history_router import router as history_router  # noqa: E402
 
 app.include_router(rb_router)
 app.include_router(eb_router)
 app.include_router(crosssell_router)
+app.include_router(rb_portal_router)
 app.include_router(history_router)
 
 
