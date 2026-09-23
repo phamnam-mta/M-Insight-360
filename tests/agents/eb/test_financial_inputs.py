@@ -176,3 +176,12 @@ def test_new_field_patterns_match_expected_labels():
     }
     for field, text in cases.items():
         assert _FIELD_PATTERNS[field].search(text), f"{field} pattern did not match {text!r}"
+
+
+def test_extracts_cogs_and_charter_capital():
+    doc = _doc("Gia von hang ban: 50.000.000\nVon dieu le: 10.000.000.000\n")
+    inputs, evidence = extract_financial_inputs([doc])
+    assert inputs.cogs_vnd == 50_000_000
+    assert inputs.charter_capital_vnd == 10_000_000_000
+    assert evidence["cogs_vnd"].status == "COMPUTED"
+    assert evidence["charter_capital_vnd"].status == "COMPUTED"

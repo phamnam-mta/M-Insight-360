@@ -35,6 +35,8 @@ class EbFinancialInputs:
     payables_vnd: float | None = None
     cash_vnd: float | None = None
     total_principal_due_vnd: float | None = None
+    cogs_vnd: float | None = None
+    charter_capital_vnd: float | None = None
 
 
 @dataclass
@@ -79,6 +81,8 @@ _FIELD_PATTERNS: dict[str, re.Pattern] = {
     "payables_vnd": re.compile(r"phai tra nguoi ban[:\s]*(-?[\d.,]+)"),
     "cash_vnd": re.compile(r"tien va tuong duong tien[:\s]*(-?[\d.,]+)"),
     "total_principal_due_vnd": re.compile(r"no goc den han[:\s]*(-?[\d.,]+)"),
+    "cogs_vnd": re.compile(r"gia von hang ban[:\s]*(-?[\d.,]+)"),
+    "charter_capital_vnd": re.compile(r"von dieu le[:\s]*(-?[\d.,]+)"),
 }
 
 
