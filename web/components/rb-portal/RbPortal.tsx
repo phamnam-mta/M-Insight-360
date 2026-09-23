@@ -15,6 +15,7 @@ import { OtherDocsTab } from "./tabs/OtherDocsTab";
 import { DocumentsTab } from "./tabs/DocumentsTab";
 import { AssessmentTab } from "./tabs/AssessmentTab";
 import { SummaryTab } from "./tabs/SummaryTab";
+import { HistoryTab } from "./tabs/HistoryTab";
 import { ZaloBotModal } from "./ZaloBotModal";
 
 const TABS = [
@@ -87,7 +88,7 @@ export default function RbPortal() {
         {activeTab === "summary" && caseId && (
           <SummaryTab caseId={caseId} onEditSection={(tab) => setActiveTab(tab as TabKey)} />
         )}
-        {/* Task 19 renders the remaining tab here */}
+        {activeTab === "history" && caseId && <HistoryTab caseId={caseId} />}
       </div>
 
       <ZaloBotModal open={zaloOpen} onClose={() => setZaloOpen(false)} />
