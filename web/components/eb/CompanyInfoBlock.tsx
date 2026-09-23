@@ -39,6 +39,9 @@ export function CompanyInfoBlock({
             </select>
           </div>
         )}
+        {period?.fallback_notice && (
+          <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-2.5 py-1.5">{period.fallback_notice}</p>
+        )}
         <div className="flex items-center gap-2 text-gray-500 text-xs">
           <FileText className="h-3.5 w-3.5 shrink-0" />
           {(result.documents ?? []).map((d) => d.filename).join(", ") || "Chưa có tệp"}

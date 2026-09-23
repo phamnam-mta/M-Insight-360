@@ -125,6 +125,14 @@ async def assess(
         else:
             financial_inputs, field_evidence = EbFinancialInputs(), {}
 
+        ho_so_period: dict = {"selected": selected_period, "available": available_periods}
+        if report_period and report_period not in period_extractions:
+            ho_so_period["requested"] = report_period
+            ho_so_period["fallback_notice"] = (
+                f"Kỳ báo cáo '{report_period}' không có trong hồ sơ tải lên — "
+                f"đã tự động chọn kỳ gần nhất có dữ liệu ({selected_period or 'không xác định'})."
+            )
+
         nwc = compute_nwc(financial_inputs, field_evidence)
         current_ratio = compute_current_ratio(financial_inputs, field_evidence)
         short_term_debt_ratio = compute_short_term_debt_ratio(financial_inputs, field_evidence)
@@ -213,8 +221,14 @@ async def assess(
             # two incompatible shapes under the same key.
             "crosssell_opportunities": opportunities,
             "export_available": True,
-            "ho_so_period": {"selected": selected_period, "available": available_periods},
+            "ho_so_period": ho_so_period,
             "capital_balance_check": capital_balance_check,
+            # Raw extracted BCTC field values, independent of which metrics
+            # happen to cite them in their own input_values — the frontend's
+            # FinancialDataTable and StressTestDrawer read from this channel
+            # directly instead of reverse-engineering it from per-metric
+            # formula documentation (see 2026-09-22 EB redesign review).
+            "financial_inputs": {k: v for k, v in asdict(financial_inputs).items() if v is not None},
         }
 
         # GreenNode's gateway has an unconfigurable hard timeout in front of

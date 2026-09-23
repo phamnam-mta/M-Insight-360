@@ -19,11 +19,13 @@ def compute_dscr(
 ) -> Metric:
     if comprehensive:
         numerator_fields = ("pat_vnd", "depreciation_vnd", "interest_expense_vnd")
+        principal_field, interest_field = "total_principal_due_vnd", "interest_expense_vnd"
         principal = inputs.total_principal_due_vnd
         interest = inputs.interest_expense_vnd
         formula = "(LNST + khau_hao + tong_chi_phi_lai_vay) / (tong_no_goc_den_han + tong_chi_phi_lai_vay)"
     else:
         numerator_fields = ("pat_vnd", "depreciation_vnd", "interest_due_vnd")
+        principal_field, interest_field = "principal_due_vnd", "interest_due_vnd"
         principal = inputs.principal_due_vnd
         interest = inputs.interest_due_vnd
         formula = "(LNST + khau_hao + lai_vay_dai_han) / (no_goc_dai_han_den_han + lai_vay_dai_han)"
@@ -38,8 +40,15 @@ def compute_dscr(
     value = round(numerator / debt_service, 4)
     return Metric(
         metric="dscr", value=value, formula=formula,
-        input_values={"pat_vnd": inputs.pat_vnd, "depreciation_vnd": inputs.depreciation_vnd, "interest": interest, "principal": principal},
-        input_sources={"pat_vnd": "bctc", "depreciation_vnd": "bctc"},
+        # Keys here must be real EbFinancialInputs field names (not generic
+        # labels) — the Stress Test drawer re-posts this dict verbatim as
+        # stress-test inputs, and the router silently drops any key that
+        # isn't a real dataclass field.
+        input_values={
+            "pat_vnd": inputs.pat_vnd, "depreciation_vnd": inputs.depreciation_vnd,
+            interest_field: interest, principal_field: principal,
+        },
+        input_sources={"pat_vnd": "bctc", "depreciation_vnd": "bctc", interest_field: "bctc", principal_field: "bctc"},
         evidence=_evidence_for(field_evidence, *numerator_fields, "principal_due_vnd", "total_principal_due_vnd"),
     )
 

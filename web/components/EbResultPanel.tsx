@@ -222,7 +222,10 @@ export default function EbResultPanel({
         {/* Cột trái — Hồ sơ & dữ liệu gốc */}
         <div className="space-y-5 order-4 lg:order-1">
           <CompanyInfoBlock result={result} onPeriodChange={(y) => onRerunWithPeriod?.(y)} />
-          <FinancialDataTable creditEngine={result.credit_engine as Record<string, MetricValue> | undefined} />
+          <FinancialDataTable
+            creditEngine={result.credit_engine as Record<string, MetricValue> | undefined}
+            financialInputs={result.financial_inputs}
+          />
         </div>
 
         {/* Cột giữa — Sức khỏe tài chính & quyết định tín dụng */}

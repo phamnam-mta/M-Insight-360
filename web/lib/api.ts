@@ -110,7 +110,17 @@ export type CrossSellPartnerRow = {
 };
 export type CrossSellEvidenceBlock = { tieu_de: string; tom_tat: string; noi_dung: Record<string, unknown> };
 
-export type HoSoPeriod = { selected: string | null; available: string[] };
+export type HoSoPeriod = {
+  selected: string | null;
+  available: string[];
+  requested?: string;
+  fallback_notice?: string;
+};
+
+// Raw extracted BCTC field values (EbFinancialInputs, non-null only), keyed
+// by real field name — independent of which credit_engine metric happens to
+// cite a given field in its own input_values.
+export type FinancialInputs = Record<string, number>;
 
 export type CapitalBalanceCheck = {
   trai: number | null;
@@ -212,6 +222,7 @@ export type AssessmentResult = {
   // EB v2 screen redesign fields.
   ho_so_period?: HoSoPeriod;
   capital_balance_check?: CapitalBalanceCheck;
+  financial_inputs?: FinancialInputs;
   // Cross-sell v3.1 fields — see comment above.
   status?: "ok" | "partial" | "blocked" | "error";
   request_id?: string;

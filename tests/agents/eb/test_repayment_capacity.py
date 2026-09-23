@@ -13,6 +13,29 @@ def test_dscr_computed():
     assert round(metric.value, 4) == round(1_400_000_000 / 1_200_000_000, 4)
 
 
+def test_dscr_input_values_use_real_ebfinancialinputs_field_names_not_generic_keys():
+    # Regression guard: input_values must be re-postable as EbFinancialInputs
+    # kwargs (the Stress Test drawer's own data path), so the keys must be
+    # real dataclass field names — never generic labels like "interest"/
+    # "principal" that silently get dropped by a valid_fields filter.
+    inputs = EbFinancialInputs(pat_vnd=1_000_000_000, depreciation_vnd=200_000_000, interest_due_vnd=200_000_000, principal_due_vnd=1_000_000_000)
+    metric = compute_dscr(inputs)
+    assert metric.input_values["interest_due_vnd"] == 200_000_000
+    assert metric.input_values["principal_due_vnd"] == 1_000_000_000
+    assert "interest" not in metric.input_values
+    assert "principal" not in metric.input_values
+
+
+def test_dscr_comprehensive_input_values_use_comprehensive_field_names():
+    inputs = EbFinancialInputs(
+        pat_vnd=1_000_000_000, depreciation_vnd=200_000_000,
+        interest_expense_vnd=250_000_000, total_principal_due_vnd=1_200_000_000,
+    )
+    metric = compute_dscr(inputs, comprehensive=True)
+    assert metric.input_values["interest_expense_vnd"] == 250_000_000
+    assert metric.input_values["total_principal_due_vnd"] == 1_200_000_000
+
+
 def test_dscr_missing_data_is_not_zero():
     metric = compute_dscr(EbFinancialInputs())
     assert metric.status == "NEED_MORE_DATA"

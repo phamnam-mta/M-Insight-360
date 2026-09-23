@@ -10,7 +10,6 @@ import {
   runStressTestV2,
   saveStressScenario,
 } from "@/lib/api";
-import { MetricValue as _MV } from "../shared/MetricCard";
 
 type Preset = "co_so" | "than_trong" | "bat_loi" | "tuy_chinh";
 
@@ -57,14 +56,11 @@ export function StressTestDrawer({ open, onClose, result }: { open: boolean; onC
   async function run() {
     setError(null);
     try {
-      const inputs: Record<string, number | null> = {};
-      for (const metric of Object.values((result.credit_engine ?? {}) as Record<string, _MV>)) {
-        if (metric.input_values) {
-          for (const [k, v] of Object.entries(metric.input_values)) {
-            if (typeof v === "number") inputs[k] = v;
-          }
-        }
-      }
+      // Raw extracted BCTC fields, straight from the /assess response's own
+      // financial_inputs channel — not scavenged from Metric.input_values,
+      // which exposes resolved/derived values under keys that don't always
+      // match a real EbFinancialInputs field name.
+      const inputs: Record<string, number | null> = { ...(result.financial_inputs ?? {}) };
       const r = await runStressTestV2(inputs, deltas, comprehensive);
       setStressResult(r);
     } catch (err) {

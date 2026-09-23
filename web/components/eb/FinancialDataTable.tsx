@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { MetricValue } from "../shared/MetricCard";
+import { FinancialInputs } from "@/lib/api";
 
 const FIELD_CODES: Record<string, { label: string; code: string; formula: string; group: string }> = {
   net_revenue_vnd: { label: "Doanh thu thuần", code: "IS_REVENUE", formula: "Doanh thu bán hàng − các khoản giảm trừ", group: "Kết quả kinh doanh" },
@@ -30,15 +31,19 @@ function formatVndSmart(value: unknown): string {
   return value.toLocaleString("vi-VN");
 }
 
-export function FinancialDataTable({ creditEngine }: { creditEngine?: Record<string, MetricValue> }) {
+export function FinancialDataTable({
+  creditEngine, financialInputs,
+}: { creditEngine?: Record<string, MetricValue>; financialInputs?: FinancialInputs }) {
   const [openRow, setOpenRow] = useState<string | null>(null);
   const groups = ["Kết quả kinh doanh", "Vốn và cơ cấu"];
 
   function rowValue(key: string): { value: unknown; source?: string } {
-    for (const metric of Object.values(creditEngine ?? {})) {
-      if (metric.input_values && key in metric.input_values) {
-        return { value: metric.input_values[key], source: metric.input_sources?.[key] };
-      }
+    // Raw extracted BCTC fields read straight from financial_inputs — the
+    // only reliable source, since not every field is cited in some metric's
+    // input_values (e.g. inventory_vnd, payables_vnd, cash_vnd,
+    // non_current_assets_vnd never are).
+    if (financialInputs && typeof financialInputs[key] === "number") {
+      return { value: financialInputs[key], source: "bctc" };
     }
     if (key === "ebitda" || key === "long_term_capital" || key === "total_borrowings") {
       const m = creditEngine?.[key];

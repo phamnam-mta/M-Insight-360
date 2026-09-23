@@ -407,6 +407,59 @@ def test_assess_endpoint_honors_explicit_report_period(monkeypatch, tmp_path):
     assert rf01["observed_value"] == 400_000_000
 
 
+def test_assess_endpoint_reports_visible_fallback_notice_for_unavailable_period(monkeypatch, tmp_path):
+    # Important finding: when the requested report_period isn't among the
+    # document's detected years, the router silently falls back to the most
+    # recent one — the frontend must be able to tell the user this happened
+    # rather than silently showing a different year than the one they picked.
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test_period_fallback.db"))
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    monkeypatch.setattr(eb_router, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""})
+
+    client = TestClient(app)
+    csv_text = (
+        b"Chi tieu,31/12/2025,31/12/2024\n"
+        b"Von chu so huu,500000000,400000000\n"
+    )
+    files = {"files": ("bctc.csv", io.BytesIO(csv_text), "text/csv")}
+    resp = client.post(
+        "/api/eb/assess",
+        data={"customer_name": "CONG TY TNHH TEST", "tax_id": "0100000001", "report_period": "2099"},
+        files=files,
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["ho_so_period"]["selected"] == "2025"  # fell back to most recent
+    assert body["ho_so_period"]["requested"] == "2099"
+    assert body["ho_so_period"]["fallback_notice"]
+
+
+def test_assess_endpoint_no_fallback_notice_when_period_honored(monkeypatch, tmp_path):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test_period_no_fallback.db"))
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    monkeypatch.setattr(eb_router, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""})
+
+    client = TestClient(app)
+    csv_text = (
+        b"Chi tieu,31/12/2025,31/12/2024\n"
+        b"Von chu so huu,500000000,400000000\n"
+    )
+    files = {"files": ("bctc.csv", io.BytesIO(csv_text), "text/csv")}
+    resp = client.post(
+        "/api/eb/assess",
+        data={"customer_name": "CONG TY TNHH TEST", "tax_id": "0100000001", "report_period": "2024"},
+        files=files,
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["ho_so_period"]["selected"] == "2024"
+    assert "fallback_notice" not in body["ho_so_period"]
+
+
 def test_stress_test_v2_endpoint_returns_new_contract():
     with TestClient(app) as client:
         resp = client.post(
@@ -423,6 +476,95 @@ def test_stress_test_v2_endpoint_returns_new_contract():
     assert "conclusions" in body
     assert "buffers" in body
     assert body["disclaimer"]
+
+
+def test_assess_endpoint_exposes_raw_financial_inputs_channel(monkeypatch, tmp_path):
+    # Critical fix regression guard: the frontend (FinancialDataTable,
+    # StressTestDrawer) needs a raw extracted-field map to read from —
+    # scavenging Metric.input_values across credit_engine metrics silently
+    # misses any field no metric happens to expose (inventory_vnd,
+    # payables_vnd, cash_vnd, non_current_assets_vnd) and, for EBIT/DSCR,
+    # exposes generic/mismatched keys. computed["financial_inputs"] must
+    # carry the real EbFinancialInputs field names/values directly.
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test_financial_inputs.db"))
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    monkeypatch.setattr(eb_router, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""})
+
+    client = TestClient(app)
+    csv_text = (
+        b"Chi tieu,31/12/2025\n"
+        b"Von chu so huu,500000000\n"
+        b"Tai san ngan han,300000000\n"
+        b"No ngan han,100000000\n"
+        b"Tai san dai han,400000000\n"
+        b"Hang ton kho,100000000\n"
+        b"Phai tra nguoi ban,50000000\n"
+        b"Tien va tuong duong tien,30000000\n"
+    )
+    files = {"files": ("bctc.csv", io.BytesIO(csv_text), "text/csv")}
+    resp = client.post(
+        "/api/eb/assess",
+        data={"customer_name": "CONG TY TNHH TEST", "tax_id": "0100000001"},
+        files=files,
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "financial_inputs" in body
+    assert body["financial_inputs"]["equity_vnd"] == 500_000_000
+    # These four fields are the ones no credit_engine metric ever exposes in
+    # its input_values — they must still be readable from the raw channel.
+    assert body["financial_inputs"]["non_current_assets_vnd"] == 400_000_000
+    assert body["financial_inputs"]["inventory_vnd"] == 100_000_000
+    assert body["financial_inputs"]["payables_vnd"] == 50_000_000
+    assert body["financial_inputs"]["cash_vnd"] == 30_000_000
+
+
+def test_stress_test_end_to_end_from_real_assess_response(monkeypatch, tmp_path):
+    # Integration regression guard for the review's Critical #1/#2: build the
+    # stress-test request exactly the way the frontend does (POST /assess,
+    # then re-post computed["financial_inputs"] verbatim as stress-test
+    # inputs) and assert the EBIT delta actually moves EBIT, and DSCR is
+    # computable rather than perpetually NEED_MORE_DATA.
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test_stress_e2e.db"))
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    monkeypatch.setattr(eb_router, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""})
+
+    client = TestClient(app)
+    csv_text = (
+        b"Chi tieu,31/12/2025\n"
+        b"Loi nhuan truoc thue,300000000\n"
+        b"Loi nhuan sau thue,240000000\n"
+        b"Khau hao,50000000\n"
+        b"Chi phi lai vay,40000000\n"
+        b"Lai den han,40000000\n"
+        b"Goc den han,100000000\n"
+    )
+    files = {"files": ("bctc.csv", io.BytesIO(csv_text), "text/csv")}
+    assess_resp = client.post(
+        "/api/eb/assess",
+        data={"customer_name": "CONG TY TNHH TEST", "tax_id": "0100000001"},
+        files=files,
+    )
+    assert assess_resp.status_code == 200
+    financial_inputs = assess_resp.json()["financial_inputs"]
+    assert "ebit_vnd" not in financial_inputs  # never directly extracted here — must fall through to pbt+interest
+
+    stress_resp = client.post(
+        "/api/eb/stress-test",
+        json={"inputs": financial_inputs, "deltas": {"ebit_pct": -20}},
+    )
+    assert stress_resp.status_code == 200
+    body = stress_resp.json()
+    ebit_before = body["before"]["ebit"]
+    ebit_after = body["after"]["ebit"]
+    assert ebit_before == 300_000_000 + 40_000_000  # PBT + interest_expense
+    assert ebit_after == round(ebit_before * 0.8, 2)
+    assert ebit_after != ebit_before
+    assert body["after"]["dscr"]["status"] == "OK"
 
 
 def test_save_and_list_stress_scenario_endpoints(tmp_path, monkeypatch):
