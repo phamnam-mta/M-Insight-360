@@ -66,64 +66,58 @@ def compute_icr(inputs: EbFinancialInputs, field_evidence: dict | None = None) -
     )
 
 
-def _insufficient_data(dscr: Metric, icr: Metric) -> RuleResult:
-    missing = [
-        name
-        for name, metric in (("DSCR", dscr), ("ICR", icr))
-        if metric.status == "NEED_MORE_DATA"
-    ]
+RF09_POLICY_VERSION = RF05_POLICY_VERSION
+
+
+def evaluate_rf05_dscr_weak(dscr: Metric, field_evidence: dict | None = None) -> RuleResult:
+    if dscr.status == "NEED_MORE_DATA":
+        return RuleResult(
+            rule_id="RF05", rule_name="Khả năng trả nợ yếu (DSCR)", status="CHƯA ĐÁNH GIÁ",
+            comment="Thiếu CFADS, gốc/lãi đến hạn — không gán 0, không kết luận 'không có cảnh báo'.",
+            verification_question="Hồ sơ có lịch trả nợ (gốc/lãi đến hạn) và số liệu CFADS để tính DSCR không?",
+            recommended_action="Bổ sung lịch trả nợ và báo cáo tài chính chi tiết trước khi đánh giá khả năng trả nợ.",
+            evidence_refs=dscr.evidence,
+        )
+    if dscr.value < DSCR_THRESHOLD:
+        return RuleResult(
+            rule_id="RF05", rule_name="Khả năng trả nợ yếu (DSCR)", status="KÍCH HOẠT", severity="CRITICAL",
+            evidence=[f"DSCR = {dscr.value} (< {DSCR_THRESHOLD})"],
+            threshold=f"quy tắc demo: DSCR {DSCR_THRESHOLD} lần",
+            comment="Chưa xác nhận là chuẩn MSB chính thức — cần người thẩm định xác nhận trước khi dùng chính thức.",
+            observed_value=dscr.value, policy_version=RF05_POLICY_VERSION,
+            verification_question="Nguồn trả nợ/CFADS có ổn định không? Khách hàng có phương án bổ sung tài sản đảm bảo hoặc nguồn thu thay thế không?",
+            recommended_action="Yêu cầu phương án tăng cường nguồn trả nợ hoặc tài sản đảm bảo bổ sung; chuyển Credit Officer thẩm định kỹ.",
+            evidence_refs=dscr.evidence,
+        )
     return RuleResult(
-        rule_id="RF05", rule_name="Khả năng trả nợ yếu", status="CHƯA ĐÁNH GIÁ",
-        evidence=[f"{name} = KHÔNG ĐỦ DỮ LIỆU" for name in missing],
-        comment="Thiếu CFO/CFADS, gốc/lãi đến hạn, hoặc EBIT/chi phí lãi vay — không gán 0, "
-                "không kết luận 'không có cảnh báo'.",
-        observed_value="KHÔNG ĐỦ DỮ LIỆU",
-        verification_question="Hồ sơ có lịch trả nợ (gốc/lãi đến hạn) và số liệu CFADS/EBIT để tính DSCR, ICR không?",
-        recommended_action="Bổ sung lịch trả nợ và báo cáo tài chính chi tiết trước khi đánh giá khả năng trả nợ.",
-        evidence_refs={**dscr.evidence, **icr.evidence},
+        rule_id="RF05", rule_name="Khả năng trả nợ yếu (DSCR)", status="KHÔNG KÍCH HOẠT",
+        observed_value=dscr.value, policy_version=RF05_POLICY_VERSION, evidence_refs=dscr.evidence,
     )
 
 
-def evaluate_rf05_weak_repayment_capacity(
-    dscr: Metric, icr: Metric, field_evidence: dict | None = None
-) -> RuleResult:
-    if dscr.status == "NEED_MORE_DATA" and icr.status == "NEED_MORE_DATA":
-        return _insufficient_data(dscr, icr)
-
-    dscr_weak = dscr.status == "OK" and dscr.value < DSCR_THRESHOLD
-    icr_weak = icr.status == "OK" and icr.value < ICR_THRESHOLD
-
-    if dscr_weak or icr_weak:
-        evidence = []
-        if dscr_weak:
-            evidence.append(f"DSCR = {dscr.value} (< {DSCR_THRESHOLD})")
-        elif dscr.status == "NEED_MORE_DATA":
-            evidence.append("DSCR = KHÔNG ĐỦ DỮ LIỆU")
-        if icr_weak:
-            evidence.append(f"ICR = {icr.value} (< {ICR_THRESHOLD})")
-        elif icr.status == "NEED_MORE_DATA":
-            evidence.append("ICR = KHÔNG ĐỦ DỮ LIỆU")
+def evaluate_rf09_icr_weak(icr: Metric, field_evidence: dict | None = None) -> RuleResult:
+    if icr.status == "NEED_MORE_DATA":
         return RuleResult(
-            rule_id="RF05", rule_name="Khả năng trả nợ yếu", status="KÍCH HOẠT", severity="CRITICAL",
-            evidence=evidence, threshold=f"quy tắc demo: DSCR {DSCR_THRESHOLD} lần, ICR {ICR_THRESHOLD} lần",
+            rule_id="RF09", rule_name="Khả năng trả nợ yếu (ICR)", status="CHƯA ĐÁNH GIÁ",
+            comment="Thiếu EBIT hoặc chi phí lãi vay — không gán 0, không kết luận 'không có cảnh báo'.",
+            verification_question="Hồ sơ có LNTT và chi phí lãi vay đầy đủ để tính ICR không?",
+            recommended_action="Bổ sung báo cáo kết quả kinh doanh chi tiết trước khi đánh giá khả năng trả nợ.",
+            evidence_refs=icr.evidence,
+        )
+    if icr.value < ICR_THRESHOLD:
+        return RuleResult(
+            rule_id="RF09", rule_name="Khả năng trả nợ yếu (ICR)", status="KÍCH HOẠT", severity="CRITICAL",
+            evidence=[f"ICR = {icr.value} (< {ICR_THRESHOLD})"],
+            threshold=f"quy tắc demo: ICR {ICR_THRESHOLD} lần",
             comment="Chưa xác nhận là chuẩn MSB chính thức — cần người thẩm định xác nhận trước khi dùng chính thức.",
-            observed_value=dscr.value if dscr_weak else icr.value,
-            policy_version=RF05_POLICY_VERSION,
+            observed_value=icr.value, policy_version=RF09_POLICY_VERSION,
             verification_question="Nguồn trả nợ/CFADS có ổn định không? Khách hàng có phương án bổ sung tài sản đảm bảo hoặc nguồn thu thay thế không?",
             recommended_action="Yêu cầu phương án tăng cường nguồn trả nợ hoặc tài sản đảm bảo bổ sung; chuyển Credit Officer thẩm định kỹ.",
-            evidence_refs={**dscr.evidence, **icr.evidence},
+            evidence_refs=icr.evidence,
         )
-
-    # Neither metric is weak — but spec §6 forbids reporting a clean pass while
-    # one of them is missing: "không kết luận 'không có cảnh báo'". A healthy
-    # ICR says nothing about a DSCR that was never computable.
-    if dscr.status == "NEED_MORE_DATA" or icr.status == "NEED_MORE_DATA":
-        return _insufficient_data(dscr, icr)
-
     return RuleResult(
-        rule_id="RF05", rule_name="Khả năng trả nợ yếu", status="KHÔNG KÍCH HOẠT",
-        policy_version=RF05_POLICY_VERSION,
-        evidence_refs={**dscr.evidence, **icr.evidence},
+        rule_id="RF09", rule_name="Khả năng trả nợ yếu (ICR)", status="KHÔNG KÍCH HOẠT",
+        observed_value=icr.value, policy_version=RF09_POLICY_VERSION, evidence_refs=icr.evidence,
     )
 
 

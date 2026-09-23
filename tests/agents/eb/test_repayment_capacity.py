@@ -2,9 +2,11 @@ from app.agents.eb.financial_inputs import EbFinancialInputs
 from app.agents.eb.repayment_capacity import (
     compute_dscr,
     compute_icr,
-    evaluate_rf05_weak_repayment_capacity,
+    evaluate_rf05_dscr_weak,
     evaluate_rf07_high_interest_burden,
+    evaluate_rf09_icr_weak,
 )
+from app.engine.core.types import Metric
 
 
 def test_dscr_computed():
@@ -77,55 +79,37 @@ def test_icr_zero_interest_expense_is_need_more_data_not_infinity():
     assert metric.status == "NEED_MORE_DATA"
 
 
-def test_rf05_activates_when_dscr_below_1():
-    dscr = compute_dscr(EbFinancialInputs(pat_vnd=100_000_000, depreciation_vnd=0, principal_due_vnd=1_000_000_000, interest_due_vnd=0))
-    icr = compute_icr(EbFinancialInputs(pbt_vnd=600_000_000, interest_expense_vnd=200_000_000))
-    result = evaluate_rf05_weak_repayment_capacity(dscr, icr)
+def test_rf05_fires_on_weak_dscr_only():
+    dscr = Metric(metric="dscr", value=0.62, formula="x", input_values={}, input_sources={})
+    result = evaluate_rf05_dscr_weak(dscr)
+    assert result.rule_id == "RF05"
     assert result.status == "KÍCH HOẠT"
-    assert result.severity == "CRITICAL"
+    assert result.observed_value == 0.62
 
 
-def test_rf05_not_evaluated_when_both_metrics_missing():
-    dscr = compute_dscr(EbFinancialInputs())
-    icr = compute_icr(EbFinancialInputs())
-    result = evaluate_rf05_weak_repayment_capacity(dscr, icr)
-    assert result.status == "CHƯA ĐÁNH GIÁ"
-
-
-def test_rf05_not_activated_when_both_metrics_healthy():
-    dscr = compute_dscr(EbFinancialInputs(pat_vnd=1_000_000_000, depreciation_vnd=0, principal_due_vnd=1_000_000_000, interest_due_vnd=0))
-    icr = compute_icr(EbFinancialInputs(pbt_vnd=600_000_000, interest_expense_vnd=200_000_000))
-    result = evaluate_rf05_weak_repayment_capacity(dscr, icr)
+def test_rf05_not_activated_when_dscr_healthy():
+    dscr = Metric(metric="dscr", value=1.5, formula="x", input_values={}, input_sources={})
+    result = evaluate_rf05_dscr_weak(dscr)
     assert result.status == "KHÔNG KÍCH HOẠT"
 
 
-def test_rf05_activates_when_one_metric_missing_and_other_weak():
-    # Spec: thiếu LNST/khấu hao/gốc/lãi -> KHÔNG ĐỦ DỮ LIỆU for that metric, never 0 —
-    # but if the OTHER metric (ICR) is present and weak, RF05 must still activate
-    # rather than being swallowed by the missing DSCR.
-    dscr = compute_dscr(EbFinancialInputs())
-    icr = compute_icr(EbFinancialInputs(pbt_vnd=-100_000_000, interest_expense_vnd=200_000_000))
-    result = evaluate_rf05_weak_repayment_capacity(dscr, icr)
-    assert result.status == "KÍCH HOẠT"
-    assert result.severity == "CRITICAL"
-
-
-def test_rf05_missing_dscr_with_healthy_icr_is_not_a_clean_pass():
-    # Spec §6: a missing DSCR must never read as a pass. RF05 only reported
-    # CHƯA ĐÁNH GIÁ when *both* metrics were missing, so a bundle with no debt
-    # schedule but a healthy ICR came back "KHÔNG KÍCH HOẠT" — indistinguishable
-    # from a company that was actually assessed and found sound.
-    dscr = compute_dscr(EbFinancialInputs())
-    icr = compute_icr(EbFinancialInputs(pbt_vnd=600_000_000, interest_expense_vnd=200_000_000))
-    result = evaluate_rf05_weak_repayment_capacity(dscr, icr)
+def test_rf05_insufficient_data_when_dscr_missing():
+    dscr = Metric.need_more_data("dscr", "x")
+    result = evaluate_rf05_dscr_weak(dscr)
     assert result.status == "CHƯA ĐÁNH GIÁ"
-    assert result.observed_value == "KHÔNG ĐỦ DỮ LIỆU"
 
 
-def test_rf05_missing_icr_with_healthy_dscr_is_not_a_clean_pass():
-    dscr = compute_dscr(EbFinancialInputs(pat_vnd=1_000_000_000, depreciation_vnd=0, principal_due_vnd=1_000_000_000, interest_due_vnd=0))
-    icr = compute_icr(EbFinancialInputs())
-    result = evaluate_rf05_weak_repayment_capacity(dscr, icr)
+def test_rf09_fires_on_weak_icr_only():
+    icr = Metric(metric="icr", value=0.75, formula="x", input_values={}, input_sources={})
+    result = evaluate_rf09_icr_weak(icr)
+    assert result.rule_id == "RF09"
+    assert result.status == "KÍCH HOẠT"
+    assert result.observed_value == 0.75
+
+
+def test_rf09_insufficient_data_when_icr_missing():
+    icr = Metric.need_more_data("icr", "x")
+    result = evaluate_rf09_icr_weak(icr)
     assert result.status == "CHƯA ĐÁNH GIÁ"
 
 
@@ -138,8 +122,7 @@ def test_dscr_and_rf05_carry_evidence_refs():
     inputs = EbFinancialInputs(pat_vnd=1_000_000_000, depreciation_vnd=200_000_000, interest_due_vnd=200_000_000, principal_due_vnd=1_000_000_000)
     dscr = compute_dscr(inputs, field_evidence)
     assert dscr.evidence["pat_vnd"] == [ref]
-    icr = compute_icr(EbFinancialInputs(pbt_vnd=600_000_000, interest_expense_vnd=200_000_000))
-    result = evaluate_rf05_weak_repayment_capacity(dscr, icr)
+    result = evaluate_rf05_dscr_weak(dscr)
     assert result.evidence_refs.get("pat_vnd") == [ref]
 
 
