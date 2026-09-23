@@ -51,6 +51,15 @@ def test_khong_xuat_when_equity_non_positive():
     assert result.block_type == "SOFT"
 
 
+def test_equity_reason_uses_vietnamese_thousand_separators():
+    # S1.2 locale rule: reasons strings are shown verbatim in the S7.3
+    # screen and the force banner — a raw Python float like -1000000.0
+    # must never leak past this boundary.
+    result = evaluate_export_gate([], equity_vnd=-1_000_000.0, dscr=_metric(1.5), icr=_metric(2.0))
+    assert any("1.000.000" in r for r in result.reasons)
+    assert not any("1000000" in r for r in result.reasons)
+
+
 def test_khong_xuat_when_dscr_and_icr_both_weak():
     flags = [_flag("RF05", "KÍCH HOẠT", observed_value=0.9), _flag("RF09", "KÍCH HOẠT", observed_value=1.2)]
     result = evaluate_export_gate(flags, equity_vnd=1000, dscr=_metric(0.9), icr=_metric(1.2))

@@ -34,6 +34,15 @@ import { EbRiskFlagsPriorityList } from "./eb/EbRiskFlagsPriorityList";
 import { LockedPlaceholders } from "./eb/LockedPlaceholders";
 import { StressTestDrawer } from "./eb/StressTestDrawer";
 
+// M1 falls back to this when overall_conclusion is null (no pending
+// overview rows) — must never surface the raw backend enum string.
+const CREDIT_READINESS_LABELS: Record<string, string> = {
+  READY: "Đủ điều kiện thẩm định",
+  READY_WITH_CONDITIONS: "Đủ điều kiện thẩm định, kèm điều kiện lưu ý",
+  MANUAL_REVIEW_REQUIRED: "Cần chuyên viên tín dụng rà soát thủ công",
+  NOT_READY: "Chưa đủ hồ sơ để thẩm định",
+};
+
 function fileIconFor(filename: string) {
   const ext = filename.split(".").pop()?.toLowerCase();
   if (ext === "csv" || ext === "xlsx") return FileSpreadsheet;
@@ -280,7 +289,10 @@ export default function EbResultPanel({
               title="Kết luận thẩm định"
               subtitle={`Kỳ ${result.ho_so_period?.selected ?? "—"} · Độ phủ dữ liệu ${coverage}%`}
             />
-            <p className="text-sm font-semibold text-msb-navy">{result.overall_conclusion ?? result.credit_readiness ?? "—"}</p>
+            <p className="text-sm font-semibold text-msb-navy">
+              {result.overall_conclusion ??
+                (result.credit_readiness ? CREDIT_READINESS_LABELS[result.credit_readiness] ?? result.credit_readiness : "—")}
+            </p>
             <p className="text-[11px] text-gray-400">
               Khuyến nghị sơ bộ từ dữ liệu BCTC — cần phê duyệt theo quy trình tín dụng MSB.
             </p>
@@ -339,7 +351,16 @@ export default function EbResultPanel({
         {/* Cột phải — R1 (một panel duy nhất) + R2 */}
         <div className="space-y-5 order-3 min-w-0">
           <div data-testid="eb-r1-panel" className="bg-white rounded-lg shadow-sm border border-gray-100 p-6 space-y-3">
-            <AiInsightSection why={result.why ?? []} creditMemo={result.credit_memo} title="M-Insight AI" />
+            <AiInsightSection
+              why={result.why ?? []}
+              creditMemo={result.credit_memo}
+              title="M-Insight AI"
+              onRetry={
+                result.ho_so_period?.selected
+                  ? () => onRerunWithPeriod?.(result.ho_so_period!.selected!)
+                  : undefined
+              }
+            />
             {/* R1.4 — hàng nút hành động, TRONG CÙNG panel */}
             <div className="flex flex-wrap gap-2 border-t border-gray-100 pt-3">
               <button

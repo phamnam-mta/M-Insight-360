@@ -5,8 +5,9 @@ import os
 import re
 import tempfile
 import time
+import unicodedata
 import uuid
-from dataclasses import asdict
+from dataclasses import asdict, replace
 
 from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
@@ -139,32 +140,45 @@ async def assess(
                 f"đã tự động chọn kỳ gần nhất có dữ liệu ({selected_period or 'không xác định'})."
             )
 
-        nwc = compute_nwc(financial_inputs, field_evidence)
-        current_ratio = compute_current_ratio(financial_inputs, field_evidence)
-        short_term_debt_ratio = compute_short_term_debt_ratio(financial_inputs, field_evidence)
-        dscr = compute_dscr(financial_inputs, field_evidence)
-        icr = compute_icr(financial_inputs, field_evidence)
+        # L2-bis: run sanity checks BEFORE any metric/flag/gate touches the
+        # raw values, and compute everything downstream from a cleaned
+        # copy with suspect fields nulled — a value the check itself
+        # doesn't trust must never reach a KPI, a red flag, the export
+        # gate, or the .docx as if it were real ("thà báo unknown còn hơn
+        # hiển thị một con số sai"). The RAW financial_inputs (below, in
+        # `computed`) still carries the suspect value so L2's "Xem dữ liệu
+        # nguồn" trace and the suspect-reason banner can show it.
+        sanity_result = run_sanity_checks(financial_inputs, selected_period)
+        clean_inputs = replace(
+            financial_inputs, **{f: None for f in sanity_result.suspect_fields}
+        )
+
+        nwc = compute_nwc(clean_inputs, field_evidence)
+        current_ratio = compute_current_ratio(clean_inputs, field_evidence)
+        short_term_debt_ratio = compute_short_term_debt_ratio(clean_inputs, field_evidence)
+        dscr = compute_dscr(clean_inputs, field_evidence)
+        icr = compute_icr(clean_inputs, field_evidence)
         output_contract_ratio = compute_output_contract_financing_ratio(
             proposed_limit_vnd, eligible_contract_value_vnd, qd_eb_039_method,
         )
-        ebitda = compute_ebitda(financial_inputs, field_evidence)
-        liquidity_balance = compute_liquidity_balance(financial_inputs, field_evidence)
-        long_term_capital = compute_long_term_capital(financial_inputs, field_evidence)
-        total_borrowings = compute_total_borrowings(financial_inputs, field_evidence)
-        capital_balance_check = compute_capital_balance_check(financial_inputs, nwc, long_term_capital)
-        receivables_financing_limit_80 = compute_receivables_financing_limit(financial_inputs.receivables_vnd, ltv=0.80)
-        receivables_financing_limit_85 = compute_receivables_financing_limit(financial_inputs.receivables_vnd, ltv=0.85)
+        ebitda = compute_ebitda(clean_inputs, field_evidence)
+        liquidity_balance = compute_liquidity_balance(clean_inputs, field_evidence)
+        long_term_capital = compute_long_term_capital(clean_inputs, field_evidence)
+        total_borrowings = compute_total_borrowings(clean_inputs, field_evidence)
+        capital_balance_check = compute_capital_balance_check(clean_inputs, nwc, long_term_capital)
+        receivables_financing_limit_80 = compute_receivables_financing_limit(clean_inputs.receivables_vnd, ltv=0.80)
+        receivables_financing_limit_85 = compute_receivables_financing_limit(clean_inputs.receivables_vnd, ltv=0.85)
 
         risk_flags = [
-            evaluate_rf01_capital_imbalance(financial_inputs, nwc, field_evidence),
-            evaluate_rf02_negative_cfo(financial_inputs, field_evidence),
+            evaluate_rf01_capital_imbalance(clean_inputs, nwc, field_evidence),
+            evaluate_rf02_negative_cfo(clean_inputs, field_evidence),
             evaluate_rf03_short_term_debt_ratio(short_term_debt_ratio, field_evidence),
-            evaluate_rf04_dsp_mismatch(financial_inputs, field_evidence),
+            evaluate_rf04_dsp_mismatch(clean_inputs, field_evidence),
             evaluate_rf05_dscr_weak(dscr, field_evidence),
             evaluate_rf09_icr_weak(icr, field_evidence),
-            evaluate_rf08_leverage(total_borrowings, financial_inputs, field_evidence),
-            evaluate_rf06_receivables_inventory_concentration(financial_inputs, field_evidence),
-            evaluate_rf07_high_interest_burden(financial_inputs, field_evidence),
+            evaluate_rf08_leverage(total_borrowings, clean_inputs, field_evidence),
+            evaluate_rf06_receivables_inventory_concentration(clean_inputs, field_evidence),
+            evaluate_rf07_high_interest_burden(clean_inputs, field_evidence),
         ]
         if extraction_warnings:
             risk_flags.append(
@@ -194,11 +208,16 @@ async def assess(
             "receivables_financing_limit_85": receivables_financing_limit_85,
         }
 
-        sanity_result = run_sanity_checks(financial_inputs, selected_period)
         gate_result = evaluate_export_gate(
-            risk_flags, equity_vnd=financial_inputs.equity_vnd, dscr=dscr, icr=icr,
-            pre_check_blocked=bool(extraction_warnings) and not any(
-                v is not None for v in asdict(financial_inputs).values()
+            risk_flags, equity_vnd=clean_inputs.equity_vnd, dscr=dscr, icr=icr,
+            # Bước 0 hard-blocks (S7.2 a): unreadable upload, or the
+            # balance sheet itself doesn't balance (Tổng tài sản ≠ Tổng
+            # nguồn vốn) — both are document defects, never overridable.
+            pre_check_blocked=(
+                (bool(extraction_warnings) and not any(
+                    v is not None for v in asdict(financial_inputs).values()
+                ))
+                or sanity_result.balance_mismatch
             ),
             # TODO(personal-vs-legal-entity detection): this codebase has no
             # BCTC classifier for personal/household filings yet (out of
@@ -267,6 +286,18 @@ async def assess(
         return computed
 
 
+def _ascii_safe_filename_part(text: str) -> str:
+    """Content-Disposition headers are latin-1 encoded — a raw Vietnamese
+    name (diacritics, either precomposed or combining) reaching the header
+    raises UnicodeEncodeError -> 500. NFKD decomposition strips ordinary
+    accents; Đ/đ have no NFKD decomposition to ASCII, so replace those
+    explicitly first."""
+    text = text.replace("Đ", "D").replace("đ", "d")
+    normalized = unicodedata.normalize("NFKD", text)
+    ascii_only = "".join(c for c in normalized if not unicodedata.combining(c))
+    return re.sub(r"[^\w\-]+", "_", ascii_only, flags=re.ASCII).strip("_")
+
+
 def _rule_result_from_dict(data: dict) -> RuleResult:
     known = {k: v for k, v in data.items() if k in RuleResult.__dataclass_fields__}
     return RuleResult(**known)
@@ -292,10 +323,20 @@ async def export(payload: dict) -> Response:
     dscr = _metric_from_credit_engine(credit_engine, "dscr")
     icr = _metric_from_credit_engine(credit_engine, "icr")
     equity_vnd = (computed.get("financial_inputs") or {}).get("equity_vnd")
+    sanity_check = computed.get("sanity_check") or {}
 
-    gate = evaluate_export_gate(risk_flags, equity_vnd=equity_vnd, dscr=dscr, icr=icr)
+    gate = evaluate_export_gate(
+        risk_flags, equity_vnd=equity_vnd, dscr=dscr, icr=icr,
+        # Same S7.2(a) hard-block as /assess: a balance sheet that
+        # doesn't balance is a document defect, never overridable by
+        # force — the re-posted `computed` carries /assess's own
+        # sanity_check verdict, so this must be re-checked here too.
+        pre_check_blocked=bool(sanity_check.get("balance_mismatch")),
+    )
 
-    if gate.verdict == "KHONG_XUAT_TU_DONG" and not force:
+    # HARD blocks (unreadable upload, balance mismatch) are never
+    # force-overridable — only SOFT (risk-signal) blocks are.
+    if gate.verdict == "KHONG_XUAT_TU_DONG" and (gate.block_type == "HARD" or not force):
         return JSONResponse(status_code=409, content={
             "export_blocked": True,
             "verdict": gate.verdict,
@@ -311,7 +352,7 @@ async def export(payload: dict) -> Response:
     customer_name = (computed.get("customer_profile") or {}).get("customer_name") or "KH"
     period = (computed.get("ho_so_period") or {}).get("selected") or "khong-xac-dinh"
     date_str = datetime.datetime.now(datetime.UTC).strftime("%Y%m%d")
-    safe_name = re.sub(r"[^\w\-]+", "_", customer_name).strip("_") or "KH"
+    safe_name = _ascii_safe_filename_part(customer_name) or "KH"
     filename = f"TTTD_{safe_name}_{period}_{date_str}_BANNHAP.docx"
 
     return Response(

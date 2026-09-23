@@ -125,6 +125,79 @@ def test_export_forced_returns_docx_with_bannhap_filename():
     assert "BANNHAP.docx" in resp.headers["content-disposition"]
 
 
+def test_export_force_cannot_bypass_balance_mismatch_hard_block():
+    # S7.2(a): a balance sheet that doesn't balance is a document defect,
+    # never overridable by a credit officer's force=True — unlike a SOFT
+    # (risk-signal) block, which force IS allowed to bypass.
+    client = TestClient(app)
+    computed = {
+        "customer_profile": {"customer_name": "ACME"},
+        "financial_inputs": {"equity_vnd": 100.0},
+        "credit_engine": {"dscr": {"value": None, "status": "NEED_MORE_DATA"}, "icr": {"value": None, "status": "NEED_MORE_DATA"}},
+        "risk_flags": [], "ho_so_period": {"selected": "2025"},
+        "sanity_check": {"suspect_fields": {}, "balance_mismatch": True, "balance_mismatch_detail": "Tổng tài sản != Tổng nguồn vốn"},
+    }
+    resp = client.post("/api/eb/export", json={"computed": computed, "force": True})
+    assert resp.status_code == 409
+    body = resp.json()
+    assert body["block_type"] == "HARD"
+
+
+def test_suspect_value_never_feeds_metrics_flags_or_gate(monkeypatch, tmp_path):
+    # L2-bis: a value the sanity check itself flags as suspect (here,
+    # revenue == the report year, the exact T27 case) must never reach
+    # downstream computation as if it were real — "thà báo unknown còn
+    # hơn hiển thị một con số sai".
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test_suspect.db"))
+    monkeypatch.setenv("CASE_FILES_DIR", str(tmp_path / "eb_files_suspect"))
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    monkeypatch.setattr(eb_router, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""})
+
+    csv_text = (
+        b"Chi tieu,31/12/2025\n"
+        b"Von chu so huu,500000000\n"
+        b"Tai san ngan han,300000000\n"
+        b"No ngan han,100000000\n"
+        b"Doanh thu thuan,2025\n"  # suspect: equals the report year
+        b"Loi nhuan truoc thue,200000000\n"
+        b"Loi nhuan sau thue,160000000\n"
+    )
+    files = {"files": ("bctc.csv", io.BytesIO(csv_text), "text/csv")}
+    client = TestClient(app)
+    resp = client.post(
+        "/api/eb/assess",
+        data={"customer_name": "A", "tax_id": "0100000001"},
+        files=files,
+    )
+    body = resp.json()
+    assert body["sanity_check"]["suspect_fields"].get("net_revenue_vnd")
+    # liquidity_balance = NWC / net_revenue_vnd — if net_revenue_vnd were
+    # left at the raw (suspect) 2025 value, this would compute a real
+    # number instead of NEED_MORE_DATA.
+    assert body["credit_engine"]["liquidity_balance"]["status"] == "NEED_MORE_DATA"
+    for flag in body["risk_flags"]:
+        assert flag.get("observed_value") != 2025
+
+
+def test_export_handles_vietnamese_customer_name_without_500():
+    # Content-Disposition headers are latin-1 encoded — a raw Vietnamese
+    # name (with combining/precomposed diacritics) in the filename must
+    # not reach the header, or Starlette raises UnicodeEncodeError -> 500.
+    client = TestClient(app)
+    computed = {
+        "customer_profile": {"customer_name": "CÔNG TY CỔ PHẦN ĐẦU TƯ ALPHA GROUP"},
+        "financial_inputs": {}, "credit_engine": {}, "risk_flags": [],
+        "ho_so_period": {"selected": "2025"},
+    }
+    resp = client.post("/api/eb/export", json={"computed": computed})
+    assert resp.status_code == 200
+    disposition = resp.headers["content-disposition"]
+    disposition.encode("latin-1")  # must not raise
+    assert "BANNHAP.docx" in disposition
+
+
 def test_export_never_trusts_client_supplied_verdict():
     # Client claims XUAT despite equity <= 0 — server must recompute and
     # still block (per this plan's Review Focus).

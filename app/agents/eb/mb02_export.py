@@ -105,6 +105,18 @@ def _find_table_by_own_first_cell(document, heading_text: str) -> Table | None:
     return None
 
 
+def _clean_financial_inputs(computed: dict) -> dict:
+    """L2-bis: strip any field the sanity check flagged as suspect before
+    it reaches the export — same discipline as the /assess endpoint's
+    clean_inputs, applied here too since the frontend re-posts the RAW
+    financial_inputs (kept raw there for L2's evidence trace)."""
+    fi = dict(computed.get("financial_inputs") or {})
+    suspect = (computed.get("sanity_check") or {}).get("suspect_fields") or {}
+    for field in suspect:
+        fi.pop(field, None)
+    return fi
+
+
 def _fill_s2_1_customer_info(document, computed: dict, fill_log: list[dict]) -> None:
     table = _find_table_by_own_first_cell(document, "THÔNG TIN KHÁCH HÀNG")
     if table is None:
@@ -117,7 +129,7 @@ def _fill_s2_1_customer_info(document, computed: dict, fill_log: list[dict]) -> 
         _set_cell_text(row.cells[1], customer_name or _MISSING_PLACEHOLDER)
         fill_log.append({"field_code": "customer_name", "row_label": "Tên Doanh nghiệp", "status": "FILLED" if customer_name else "MISSING"})
 
-    charter_capital = (computed.get("financial_inputs") or {}).get("charter_capital_vnd")
+    charter_capital = _clean_financial_inputs(computed).get("charter_capital_vnd")
     row = _find_row_by_label(table, "Vốn điều lệ")
     if row is not None:
         amount = _format_number_vn(charter_capital / 1_000_000 if charter_capital is not None else None, 0)
@@ -140,7 +152,7 @@ def _fill_s2_2_general_metrics(document, computed: dict, fill_log: list[dict]) -
     if table is None:
         fill_log.append({"field_code": "S2.2", "status": "TABLE_NOT_FOUND"})
         return
-    fi = computed.get("financial_inputs") or {}
+    fi = _clean_financial_inputs(computed)
     equity = fi.get("equity_vnd")
     total_borrowings = _metric_value(computed, "total_borrowings")
     revenue = fi.get("net_revenue_vnd")
@@ -192,7 +204,7 @@ def _fill_s2_3_capital_adequacy(document, computed: dict, fill_log: list[dict]) 
     if table is None:
         fill_log.append({"field_code": "S2.3", "status": "TABLE_NOT_FOUND"})
         return
-    fi = computed.get("financial_inputs") or {}
+    fi = _clean_financial_inputs(computed)
     long_term_capital = _metric_value(computed, "long_term_capital")
     nwc = _metric_value(computed, "nwc")
     _fill_cell(table, "1. Nguồn vốn dài hạn", 3, long_term_capital, "BS_LONG_TERM_CAPITAL", fill_log)
@@ -227,7 +239,7 @@ def _fill_s2_5_business_plan(document, computed: dict, fill_log: list[dict]) -> 
     if table is None:
         fill_log.append({"field_code": "S2.5", "status": "TABLE_NOT_FOUND"})
         return
-    fi = computed.get("financial_inputs") or {}
+    fi = _clean_financial_inputs(computed)
     _fill_cell(table, "Tổng doanh thu", 2, fi.get("net_revenue_vnd"), "IS_REVENUE", fill_log, label_col=1)
     _fill_cell(table, "Lợi nhuận trước thuế (3)= (2)- (1)", 2, fi.get("pbt_vnd"), "IS_PBT", fill_log, label_col=1)
     _fill_cell(table, "Chi phí khấu hao", 2, fi.get("depreciation_vnd"), "IS_DEPRECIATION", fill_log, label_col=1)
@@ -235,7 +247,7 @@ def _fill_s2_5_business_plan(document, computed: dict, fill_log: list[dict]) -> 
 
 
 def _fill_s2_4_qd_eb_039(document, computed: dict, fill_log: list[dict]) -> None:
-    receivables = (computed.get("financial_inputs") or {}).get("receivables_vnd")
+    receivables = _clean_financial_inputs(computed).get("receivables_vnd")
     target = _nfc("Hạn mức tài trợ theo phương án đầu ra dự kiến:")
     for paragraph in document.paragraphs:
         if _nfc(paragraph.text.strip()).startswith(target):
@@ -267,16 +279,26 @@ def build_mb02_docx(computed: dict, *, force: bool = False, actor: str | None = 
         "cells": [],
     }
 
-    gate = computed.get("export_gate") or {}
-    if force and gate.get("verdict") == "KHONG_XUAT_TU_DONG":
-        signal_lines = "; ".join(
-            f"{s.get('rule_name', s.get('rule_id'))}: {s.get('observed_value', '?')}"
+    def _observed_value_text(value) -> str:
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return _format_number_vn(value, 2)
+        return str(value) if value is not None else "?"
+
+    def _signal_lines(gate: dict) -> str:
+        return "; ".join(
+            f"{s.get('rule_name', s.get('rule_id'))}: {_observed_value_text(s.get('observed_value'))}"
             for s in gate.get("signals") or []
         ) or "; ".join(gate.get("reasons") or [])
-        banner = document.paragraphs[0].insert_paragraph_before(
-            f"[BẢN NHÁP XUẤT THEO YÊU CẦU CỦA CÁN BỘ — HỆ THỐNG KHÔNG TỰ XUẤT] {signal_lines}"
-        )
+
+    def _insert_banner(prefix: str, gate: dict) -> None:
+        banner = document.paragraphs[0].insert_paragraph_before(f"{prefix} {_signal_lines(gate)}")
         banner.runs[0].bold = True
+
+    gate = computed.get("export_gate") or {}
+    if force and gate.get("verdict") == "KHONG_XUAT_TU_DONG":
+        _insert_banner("[BẢN NHÁP XUẤT THEO YÊU CẦU CỦA CÁN BỘ — HỆ THỐNG KHÔNG TỰ XUẤT]", gate)
+    elif gate.get("verdict") == "XUAT_KEM_CANH_BAO":
+        _insert_banner("[BẢN NHÁP CÓ CẢNH BÁO — CẦN THẨM ĐỊNH THÊM]", gate)
 
     _fill_s2_1_customer_info(document, computed, fill_log["cells"])
     _fill_s2_2_general_metrics(document, computed, fill_log["cells"])

@@ -23,6 +23,14 @@ _DSCR_HARD_THRESHOLD = 1.0
 _ICR_HARD_THRESHOLD = 1.5
 
 
+def _format_vnd_vn(value: float) -> str:
+    """S1.2 locale rule: reasons strings are shown verbatim in the S7.3
+    screen and the force banner — a raw Python float must never leak past
+    this boundary."""
+    formatted = f"{value:,.0f}"
+    return formatted.replace(",", "\x00").replace(".", ",").replace("\x00", ".")
+
+
 @dataclass
 class ExportGateResult:
     verdict: Verdict
@@ -67,7 +75,7 @@ def evaluate_export_gate(
     if equity_non_positive or too_many_signals or both_weak:
         reasons = []
         if equity_non_positive:
-            reasons.append(f"Vốn chủ sở hữu = {equity_vnd} (≤ 0).")
+            reasons.append(f"Vốn chủ sở hữu = {_format_vnd_vn(equity_vnd)} (≤ 0).")
         if too_many_signals:
             reasons.append(f"Có {signal_count} tín hiệu tín dụng cần thẩm định thêm (≥ 3).")
         if both_weak:

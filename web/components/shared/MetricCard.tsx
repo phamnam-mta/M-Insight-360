@@ -11,6 +11,14 @@ export type MetricValue = {
   policy_version?: string | null;
 };
 
+// S1.2 locale rule: Vietnamese '.' thousands, ',' decimal — a raw
+// JS number (e.g. 128061897.6 or 0.6231) must never reach the DOM.
+function formatMetricValue(value: number | string | null, unit: string): string {
+  if (typeof value !== "number") return String(value ?? "—");
+  const decimals = unit === "VND" ? 0 : 2;
+  return value.toLocaleString("vi-VN", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
+
 export function MetricCard({
   label,
   unit,
@@ -63,7 +71,7 @@ export function MetricCard({
     <div data-testid="eb-kpi-card" className="bg-white rounded-lg border border-gray-100 shadow-sm p-4">
       <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wide">{label}</h3>
       <p className="text-2xl font-bold mt-1 text-msb-navy">
-        {metric.value} {unit}
+        {formatMetricValue(metric.value, unit)} {unit}
       </p>
       {note && <p className="text-xs text-gray-500 mt-1">{note}</p>}
       <button className="text-xs text-msb-navy underline mt-2" onClick={() => setOpen((v) => !v)}>

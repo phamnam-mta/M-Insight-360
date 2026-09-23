@@ -177,6 +177,61 @@ def test_force_banner_inserted_at_top_when_forced_and_blocked():
     assert fill_log["actor"] == "rm.nguyen"
 
 
+def test_force_banner_formats_observed_value_vietnamese_style():
+    # S1.2 locale rule applies to the force banner too — a raw Python
+    # float like 0.62 must render as "0,62", never leak the '.' separator.
+    computed = _make_computed()
+    computed["export_gate"] = {
+        "verdict": "KHONG_XUAT_TU_DONG", "block_type": "SOFT", "signal_count": 5,
+        "signals": [{"rule_id": "RF05", "rule_name": "DSCR yếu", "status": "KÍCH HOẠT", "observed_value": 0.6231}],
+        "data_warnings": [], "reasons": ["DSCR 0,62x < 1,0x."],
+    }
+    docx_bytes, _ = build_mb02_docx(computed, force=True, actor="rm.nguyen")
+    doc = _reload(docx_bytes)
+    first_paragraph_text = doc.paragraphs[0].text
+    assert "0,62" in first_paragraph_text
+    assert "0.6231" not in first_paragraph_text
+    assert "0.62" not in first_paragraph_text
+
+
+def test_suspect_field_never_written_into_export():
+    # L2-bis: a field the sanity check flagged as suspect must render as
+    # the missing-data placeholder in the export, never the raw (possibly
+    # wrong) number — even though the frontend re-posts the RAW
+    # financial_inputs for its own L2 evidence trace.
+    computed = _make_computed(net_revenue_vnd=2025.0)
+    computed["sanity_check"] = {
+        "suspect_fields": {"net_revenue_vnd": "Giá trị đọc được nghi ngờ sai dòng."},
+        "balance_mismatch": False, "balance_mismatch_detail": None,
+    }
+    docx_bytes, _ = build_mb02_docx(computed)
+    doc = _reload(docx_bytes)
+    table31 = next(t for t in doc.tables if t.rows[0].cells[0].text.strip() == "Chỉ tiêu" and len(t.rows) == 14)
+    row = next(r for r in table31.rows if "Tổng doanh thu" in r.cells[0].text)
+    assert row.cells[3].text.strip() == "[Chưa xác định từ hồ sơ tải lên]"
+    table37 = next(t for t in doc.tables if len(t.rows) == 20 and len(t.columns) >= 2 and t.rows[0].cells[1].text.strip() == "Chỉ tiêu")
+    row37 = next(r for r in table37.rows if "Tổng doanh thu" in r.cells[1].text)
+    assert row37.cells[2].text.strip() == "[Chưa xác định từ hồ sơ tải lên]"
+
+
+def test_warning_banner_inserted_for_xuat_kem_canh_bao_verdict():
+    # The export button's own subtext promises "bản nháp sẽ có banner
+    # cảnh báo" for XUAT_KEM_CANH_BAO — this verdict never needs force
+    # (it isn't blocked), so the banner must appear on the plain export
+    # path too, not only the forced-override KHONG_XUAT_TU_DONG path.
+    computed = _make_computed()
+    computed["export_gate"] = {
+        "verdict": "XUAT_KEM_CANH_BAO", "block_type": None, "signal_count": 1,
+        "signals": [{"rule_id": "RF05", "rule_name": "DSCR yếu", "status": "KÍCH HOẠT", "observed_value": 0.62}],
+        "data_warnings": [], "reasons": [],
+    }
+    docx_bytes, _ = build_mb02_docx(computed)
+    doc = _reload(docx_bytes)
+    first_paragraph_text = doc.paragraphs[0].text
+    assert "CẢNH BÁO" in first_paragraph_text
+    assert "0,62" in first_paragraph_text
+
+
 def test_no_banner_when_verdict_is_xuat():
     docx_bytes, fill_log = build_mb02_docx(_make_computed())
     doc = _reload(docx_bytes)
