@@ -234,6 +234,29 @@ def _fill_s2_5_business_plan(document, computed: dict, fill_log: list[dict]) -> 
     _fill_cell(table, "Chi phí lãi vay vốn", 2, fi.get("interest_expense_vnd"), "IS_INTEREST", fill_log, label_col=1)
 
 
+def _fill_s2_4_qd_eb_039(document, computed: dict, fill_log: list[dict]) -> None:
+    receivables = (computed.get("financial_inputs") or {}).get("receivables_vnd")
+    target = _nfc("Hạn mức tài trợ theo phương án đầu ra dự kiến:")
+    for paragraph in document.paragraphs:
+        if _nfc(paragraph.text.strip()).startswith(target):
+            if receivables is None:
+                limit_text = _MISSING_PLACEHOLDER
+                status = "MISSING"
+            else:
+                limit_trieu = round(receivables * 0.80 / 1_000_000)
+                limit_text = f"{_format_number_vn(limit_trieu, 0)} triệu đồng (80% Số dư phải thu cuối kỳ, Giá trị tham chiếu từ BCTC)"
+                status = "FILLED"
+            new_text = f"Hạn mức tài trợ theo phương án đầu ra dự kiến: {limit_text}"
+            if paragraph.runs:
+                paragraph.runs[0].text = new_text
+                for run in paragraph.runs[1:]:
+                    run.text = ""
+            else:
+                paragraph.add_run(new_text)
+            fill_log.append({"field_code": "QD039_REFERENCE_LIMIT", "value_vnd": receivables, "status": status})
+            break
+
+
 def build_mb02_docx(computed: dict, *, force: bool = False, actor: str | None = None) -> tuple[bytes, dict]:
     computed = computed or {}
     document = docx.Document(str(_TEMPLATE_PATH))
@@ -250,7 +273,7 @@ def build_mb02_docx(computed: dict, *, force: bool = False, actor: str | None = 
     _fill_s2_2_general_metrics(document, computed, fill_log["cells"])
     _fill_s2_3_capital_adequacy(document, computed, fill_log["cells"])
     _fill_s2_5_business_plan(document, computed, fill_log["cells"])
-    # S2.4 fill call added by Task 11 goes here.
+    _fill_s2_4_qd_eb_039(document, computed, fill_log["cells"])
 
     buffer = io.BytesIO()
     document.save(buffer)

@@ -124,3 +124,39 @@ def test_s2_5_fills_nam_0_only_never_plan_years():
     assert row.cells[2].text.strip() == "128.062"  # Năm 0
     assert row.cells[3].text.strip() == ""  # Năm 1 — plan year, never written
     assert row.cells[4].text.strip() == ""  # Năm 2 — plan year, never written
+
+
+def test_s2_4_fills_reference_limit_paragraph():
+    computed = _make_computed(receivables_vnd=1_030_523_666.0)
+    docx_bytes, _ = build_mb02_docx(computed)
+    doc = _reload(docx_bytes)
+    text = "\n".join(p.text for p in doc.paragraphs)
+    assert "Hạn mức tài trợ theo phương án đầu ra dự kiến: 824" in text  # 1.030.523.666 * 80% / 1e6 ≈ 824 triệu
+    assert "Số dư phải thu cuối kỳ" in text
+
+
+def test_s2_4_missing_receivables_leaves_placeholder_note():
+    computed = _make_computed(receivables_vnd=None)
+    docx_bytes, _ = build_mb02_docx(computed)
+    doc = _reload(docx_bytes)
+    text = "\n".join(p.text for p in doc.paragraphs)
+    assert "Hạn mức tài trợ theo phương án đầu ra dự kiến: [Chưa xác định" in text
+
+
+def test_s8_legal_checkbox_row_never_written():
+    # "Tình trạng khách hàng" (row 5 of table 2) is an S1.3 checkbox row —
+    # must remain byte-for-byte the template's own text.
+    docx_bytes, _ = build_mb02_docx(_make_computed())
+    doc = _reload(docx_bytes)
+    row = next(r for r in doc.tables[2].rows if r.cells[0].text.strip() == "Tình trạng khách hàng")
+    assert row.cells[1].text.strip() == "KH mới       KH hiện hữu"
+
+
+def test_s8_cif_field_keeps_template_ellipsis():
+    # CIF has no BCTC source at all (S8) — must never become
+    # "[Chưa xác định từ hồ sơ tải lên]", only the template's own "……".
+    docx_bytes, _ = build_mb02_docx(_make_computed())
+    doc = _reload(docx_bytes)
+    row = next(r for r in doc.tables[2].rows if "Đăng ký kinh doanh" == r.cells[0].text.strip())
+    assert "……" in row.cells[1].text
+    assert "[Chưa xác định" not in row.cells[1].text
