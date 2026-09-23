@@ -125,6 +125,24 @@ def test_export_forced_returns_docx_with_bannhap_filename():
     assert "BANNHAP.docx" in resp.headers["content-disposition"]
 
 
+def test_export_response_has_no_oversized_custom_headers():
+    # Production bug found via live verification: GreenNode's gateway 502s
+    # any response whose custom header exceeds its (undocumented) header-
+    # size limit. The old X-Fill-Log header (base64 JSON of every filled
+    # cell) routinely exceeds 4KB and is never read by any client (no
+    # frontend code references it) — it silently broke every real export.
+    client = TestClient(app)
+    computed = {
+        "customer_profile": {"customer_name": "CÔNG TY CỔ PHẦN ĐẦU TƯ ALPHA GROUP"},
+        "financial_inputs": {}, "credit_engine": {}, "risk_flags": [],
+        "ho_so_period": {"selected": "2025"},
+    }
+    resp = client.post("/api/eb/export", json={"computed": computed})
+    assert resp.status_code == 200
+    for name, value in resp.headers.items():
+        assert len(value.encode()) < 2048, f"header {name!r} is {len(value.encode())} bytes — risks a gateway 502"
+
+
 def test_export_force_cannot_bypass_balance_mismatch_hard_block():
     # S7.2(a): a balance sheet that doesn't balance is a document defect,
     # never overridable by a credit officer's force=True — unlike a SOFT

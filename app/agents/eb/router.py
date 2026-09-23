@@ -1,6 +1,4 @@
-import base64
 import datetime
-import json
 import os
 import re
 import tempfile
@@ -355,13 +353,16 @@ async def export(payload: dict) -> Response:
     safe_name = _ascii_safe_filename_part(customer_name) or "KH"
     filename = f"TTTD_{safe_name}_{period}_{date_str}_BANNHAP.docx"
 
+    # fill_log is diagnostic only — no frontend code reads it. It used to
+    # ride along as a base64 X-Fill-Log header, but that routinely exceeds
+    # 4KB and silently 502'd every real export at GreenNode's gateway
+    # (which caps custom header size below that) — never surfaced as an
+    # app-level error, since the gateway rejects the response before the
+    # client sees anything but "invalid response from upstream".
     return Response(
         content=docx_bytes,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        headers={
-            "Content-Disposition": f'attachment; filename="{filename}"',
-            "X-Fill-Log": base64.b64encode(json.dumps(fill_log, ensure_ascii=False).encode()).decode(),
-        },
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
