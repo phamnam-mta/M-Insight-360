@@ -32,6 +32,53 @@ CREATE TABLE IF NOT EXISTS eb_stress_scenarios (
     request_json TEXT NOT NULL,
     response_json TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS rb_cases (
+    case_id TEXT PRIMARY KEY,
+    status TEXT NOT NULL DEFAULT 'RECEIVED',
+    customer_name TEXT NOT NULL,
+    tax_id TEXT NOT NULL,
+    customer_json TEXT,
+    legal_json TEXT,
+    income_json TEXT,
+    loan_json TEXT,
+    collateral_json TEXT,
+    other_json TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS rb_case_documents (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    case_id TEXT NOT NULL,
+    file_id TEXT NOT NULL,
+    filename TEXT NOT NULL,
+    category TEXT NOT NULL,
+    document_type TEXT,
+    status TEXT NOT NULL DEFAULT 'UPLOADED',
+    content_type TEXT,
+    size_bytes INTEGER NOT NULL,
+    storage_path TEXT NOT NULL,
+    uploaded_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS rb_case_assessments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    case_id TEXT NOT NULL,
+    version INTEGER NOT NULL,
+    kind TEXT NOT NULL,
+    computed_json TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS rb_case_audit (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    case_id TEXT NOT NULL,
+    actor TEXT NOT NULL DEFAULT 'RM',
+    action TEXT NOT NULL,
+    detail TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 """
 
 
