@@ -1,3 +1,5 @@
+import io
+
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -77,3 +79,56 @@ def test_patch_on_unknown_case_returns_404(tmp_path, monkeypatch):
     client = TestClient(app)
     resp = client.patch("/api/rb-portal/cases/RB-NOPE/customer", json={"full_name": "A"})
     assert resp.status_code == 404
+
+
+def test_upload_document_requires_category(tmp_path, monkeypatch):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    monkeypatch.setenv("CASE_FILES_DIR", str(tmp_path / "files"))
+    from app.config import get_settings
+    get_settings.cache_clear()
+    client = TestClient(app)
+    case_id = client.post("/api/rb-portal/cases", json={"customer_name": "A", "tax_id": "111"}).json()["case_id"]
+    resp = client.post(
+        f"/api/rb-portal/cases/{case_id}/documents",
+        files={"file": ("cccd.csv", io.BytesIO(b"CCCD SO 001234567890"), "text/csv")},
+    )
+    assert resp.status_code == 422  # category missing
+
+
+def test_upload_document_and_list(tmp_path, monkeypatch):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    monkeypatch.setenv("CASE_FILES_DIR", str(tmp_path / "files"))
+    from app.config import get_settings
+    get_settings.cache_clear()
+    client = TestClient(app)
+    case_id = client.post("/api/rb-portal/cases", json={"customer_name": "A", "tax_id": "111"}).json()["case_id"]
+    resp = client.post(
+        f"/api/rb-portal/cases/{case_id}/documents",
+        data={"category": "LEGAL"},
+        files={"file": ("cccd.csv", io.BytesIO(b"CCCD SO 001234567890"), "text/csv")},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "EXTRACTED"
+
+    resp = client.get(f"/api/rb-portal/cases/{case_id}/documents")
+    docs = resp.json()["documents"]
+    assert len(docs) == 1
+    assert docs[0]["filename"] == "cccd.csv"
+    assert docs[0]["category"] == "LEGAL"
+
+
+def test_upload_unreadable_file_marks_failed_not_500(tmp_path, monkeypatch):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    monkeypatch.setenv("CASE_FILES_DIR", str(tmp_path / "files"))
+    from app.config import get_settings
+    get_settings.cache_clear()
+    client = TestClient(app)
+    case_id = client.post("/api/rb-portal/cases", json={"customer_name": "A", "tax_id": "111"}).json()["case_id"]
+    resp = client.post(
+        f"/api/rb-portal/cases/{case_id}/documents",
+        data={"category": "OTHER"},
+        files={"file": ("photo.jpg", io.BytesIO(b"\xff\xd8\xff not a real image"), "image/jpeg")},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "FAILED"
