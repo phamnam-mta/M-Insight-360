@@ -157,6 +157,40 @@ def test_extract_period_aware_conflicting_values_same_year_is_pending_review():
     assert by_year["2025"].inputs.equity_vnd is None
 
 
+def test_select_richest_period_prefers_populated_over_newest_sparse_year():
+    # Production bug: a spurious/near-empty period bucket for a LATER year
+    # (e.g. noise picked up from an unrelated bank-statement sheet bundled
+    # in the same upload) must never win over a real, richly-populated
+    # BCTC period just because its year number sorts higher.
+    from app.agents.eb.financial_inputs import EbFinancialInputs, PeriodExtraction, select_richest_period
+
+    period_extractions = {
+        "2026": PeriodExtraction(year="2026", inputs=EbFinancialInputs(cash_vnd=1_000_000.0), field_evidence={}),
+        "2025": PeriodExtraction(
+            year="2025",
+            inputs=EbFinancialInputs(equity_vnd=580_965_107_518.0, net_revenue_vnd=90_105_893_754.0, pat_vnd=1.0),
+            field_evidence={},
+        ),
+    }
+    assert select_richest_period(period_extractions) == "2025"
+
+
+def test_select_richest_period_ties_broken_by_newest_year():
+    from app.agents.eb.financial_inputs import EbFinancialInputs, PeriodExtraction, select_richest_period
+
+    period_extractions = {
+        "2024": PeriodExtraction(year="2024", inputs=EbFinancialInputs(equity_vnd=1.0), field_evidence={}),
+        "2025": PeriodExtraction(year="2025", inputs=EbFinancialInputs(equity_vnd=1.0), field_evidence={}),
+    }
+    assert select_richest_period(period_extractions) == "2025"
+
+
+def test_select_richest_period_empty_returns_none():
+    from app.agents.eb.financial_inputs import select_richest_period
+
+    assert select_richest_period({}) is None
+
+
 def test_new_field_patterns_match_expected_labels():
     from app.agents.eb.financial_inputs import _FIELD_PATTERNS
 

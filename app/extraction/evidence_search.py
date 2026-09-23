@@ -4,7 +4,7 @@ import unicodedata
 from app.engine.core.numbers import parse_vn_number
 from app.engine.core.types import EvidenceRef
 
-from .period_columns import detect_document_primary_year, detect_year_columns
+from .period_columns import detect_document_primary_year, detect_table_primary_year, detect_year_columns
 from .types import ExtractedDocument
 
 
@@ -119,12 +119,21 @@ def find_all_matches_by_period(
     results: list[tuple[EvidenceRef, str, str, str]] = []
     for doc in documents:
         file_id = getattr(doc, "file_id", doc.filename)
-        primary_year = detect_document_primary_year(doc)
+        # A document-wide fallback for tables that carry no date signal of
+        # their own — never the primary source: a single upload can bundle
+        # unrelated sheets (a BCTC table alongside a bank-statement "sao ke"
+        # sheet whose hundreds of transaction dates would otherwise swamp a
+        # document-wide max() and misdetect the BCTC's own fiscal year), so
+        # each table's own year must come from its own rows first.
+        doc_primary_year = detect_document_primary_year(doc)
 
         matched_in_tables = False
         for table in doc.tables:
             if not table.rows:
                 continue
+            primary_year = detect_table_primary_year(table)
+            if primary_year is None:
+                primary_year = doc_primary_year
             year_columns = detect_year_columns(table.rows[0], primary_year)
             for row_idx, row in enumerate(table.rows[1:], start=1):
                 joined = " | ".join(row)
@@ -169,7 +178,7 @@ def find_all_matches_by_period(
                     (l for l in doc.text.splitlines() if pattern.search(_strip_accents_lower(l))),
                     doc.text,
                 )
-                year = str(primary_year) if primary_year else "khong_xac_dinh"
+                year = str(doc_primary_year) if doc_primary_year else "khong_xac_dinh"
                 results.append((
                     EvidenceRef(
                         file_id=file_id, filename=doc.filename,

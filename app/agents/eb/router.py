@@ -28,7 +28,7 @@ from .document_check import MANDATORY_DOC_TYPES, classify_documents, missing_fro
 from .document_status import build_document_status_list
 from .dsp_reconciliation import evaluate_rf04_dsp_mismatch
 from .export_gate import evaluate_export_gate
-from .financial_inputs import EbFinancialInputs, extract_period_aware_financial_inputs
+from .financial_inputs import EbFinancialInputs, extract_period_aware_financial_inputs, select_richest_period
 from .leverage import (
     compute_short_term_debt_ratio,
     evaluate_rf03_short_term_debt_ratio,
@@ -120,9 +120,15 @@ async def assess(
 
         period_extractions = extract_period_aware_financial_inputs(documents)
         available_periods = sorted(period_extractions.keys(), reverse=True)
+        # Auto-selection (no explicit report_period requested) picks the
+        # most POPULATED period, not just the newest year number — an
+        # unrelated sheet bundled in the same upload (e.g. a bank
+        # statement) can spuriously create a near-empty period bucket for
+        # a later year that would otherwise silently outrank the real,
+        # richly-populated BCTC period.
         selected_period = (
             report_period if report_period in period_extractions
-            else (available_periods[0] if available_periods else None)
+            else select_richest_period(period_extractions)
         )
         if selected_period and selected_period in period_extractions:
             financial_inputs = period_extractions[selected_period].inputs

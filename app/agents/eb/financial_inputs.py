@@ -146,3 +146,22 @@ def extract_period_aware_financial_inputs(
             field_evidence=by_year_evidence[year],
         )
     return result
+
+
+def select_richest_period(period_extractions: dict[str, "PeriodExtraction"]) -> str | None:
+    """Picks the period with the most populated fields, tie-broken by the
+    newest year — never just the newest year outright. A single upload can
+    bundle an unrelated sheet (e.g. a bank statement) alongside the real
+    BCTC; if any of its rows coincidentally satisfy a field pattern, that
+    creates a near-empty period bucket for a later year that would
+    otherwise silently outrank the real, richly-populated BCTC period
+    (auto-selection sorted by year number alone always prefers the newer,
+    emptier bucket over the correct one)."""
+    if not period_extractions:
+        return None
+
+    def _populated_count(year: str) -> int:
+        inputs = period_extractions[year].inputs
+        return sum(1 for v in vars(inputs).values() if v is not None)
+
+    return max(period_extractions, key=lambda year: (_populated_count(year), year))

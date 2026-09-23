@@ -10,7 +10,7 @@ silently attributed to the wrong year.
 import re
 import unicodedata
 
-from .types import ExtractedDocument
+from .types import ExtractedDocument, ExtractedTable
 
 _YEAR_RE = re.compile(r"\b(20\d{2})\b")
 _CURRENT_LABELS = ("so cuoi nam", "cuoi ky", "cuoi nam", "nam nay")
@@ -28,6 +28,18 @@ def detect_document_primary_year(doc: ExtractedDocument) -> int | None:
     years: list[int] = []
     for text in haystacks:
         years.extend(int(y) for y in _YEAR_RE.findall(text))
+    return max(years) if years else None
+
+
+def detect_table_primary_year(table: ExtractedTable) -> int | None:
+    """Same signal search as detect_document_primary_year, but scoped to a
+    single table's own rows — an upload can bundle a BCTC sheet together
+    with an unrelated sheet (e.g. a bank-statement "sao ke" with hundreds
+    of transaction dates); scanning the whole document's text for that
+    BCTC sheet's year would let the other sheet's dates swamp max() and
+    misdetect the BCTC's own fiscal year."""
+    text = " ".join(" ".join(row) for row in table.rows)
+    years = [int(y) for y in _YEAR_RE.findall(text)]
     return max(years) if years else None
 
 

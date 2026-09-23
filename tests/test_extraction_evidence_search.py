@@ -164,3 +164,36 @@ def test_find_all_matches_by_period_no_primary_year_found_yields_khong_xac_dinh(
     doc = ExtractedDocument(filename="bctc.xlsx", doc_type="xlsx", text="", tables=[table], extraction_method="spreadsheet", confidence=1.0)
     results = find_all_matches_by_period([doc], _TSNH_PATTERN)
     assert results[0][2] == "khong_xac_dinh"
+
+
+def test_find_all_matches_by_period_unrelated_sheet_does_not_pollute_bctc_years():
+    # Production bug: a single upload bundles a BCTC summary sheet (own
+    # fiscal year visible in its own rows, no explicit year in its header)
+    # with an unrelated bank-statement ("sao ke") sheet whose hundreds of
+    # transaction rows carry dates into a later year. The BCTC sheet's own
+    # value must stay tagged with ITS year, not the other sheet's.
+    bctc_table = ExtractedTable(
+        rows=[
+            ["Chi tieu", "So cuoi nam", "So dau nam"],
+            ["Tai san ngan han", "100.000.000", "90.000.000"],
+            ["Bao cao lap ngay 31/12/2025"],
+        ],
+        sheet_or_page="10_BCTC_TOM_TAT",
+    )
+    saoke_table = ExtractedTable(
+        rows=[
+            ["Ngay", "Dien giai", "So tien"],
+            ["31/01/2026", "Giao dich 1", "1.000.000"],
+            ["28/02/2026", "Giao dich 2", "2.000.000"],
+        ],
+        sheet_or_page="SAO KE",
+    )
+    doc = ExtractedDocument(
+        filename="ho_so.xlsx", doc_type="xlsx",
+        text="\n".join(" | ".join(r) for t in (bctc_table, saoke_table) for r in t.rows),
+        tables=[bctc_table, saoke_table], extraction_method="spreadsheet", confidence=1.0,
+    )
+    results = find_all_matches_by_period([doc], _TSNH_PATTERN)
+    by_year = {year: raw for _, raw, year, _ in results}
+    assert by_year["2025"] == "100.000.000"
+    assert "2026" not in by_year

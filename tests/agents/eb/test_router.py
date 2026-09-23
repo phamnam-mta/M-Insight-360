@@ -143,6 +143,54 @@ def test_export_response_has_no_oversized_custom_headers():
         assert len(value.encode()) < 2048, f"header {name!r} is {len(value.encode())} bytes — risks a gateway 502"
 
 
+def test_assess_endpoint_bank_statement_sheet_does_not_hijack_bctc_period(monkeypatch, tmp_path):
+    # Production bug: a single .xlsx upload bundles a BCTC summary sheet
+    # (fiscal year 2025, using "So cuoi nam"/"So dau nam" relative labels —
+    # no explicit year in its own header row) alongside an unrelated bank
+    # statement ("sao ke") sheet whose transaction rows carry dates into
+    # 2026. Before the fix: the sao ke sheet's dates swamped document-wide
+    # year detection, mislabeling the real BCTC data as period "2026" and
+    # leaving revenue/equity looking unset ("chua xac dinh").
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test_saoke.db"))
+    monkeypatch.setenv("CASE_FILES_DIR", str(tmp_path / "eb_files_saoke"))
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    monkeypatch.setattr(eb_router, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""})
+
+    import openpyxl
+
+    wb = openpyxl.Workbook()
+    bctc_ws = wb.active
+    bctc_ws.title = "10_BCTC_TOM_TAT"
+    bctc_ws.append(["Chi tieu", "So cuoi nam", "So dau nam"])
+    bctc_ws.append(["Von chu so huu", 580_965_107_518, 500_000_000_000])
+    bctc_ws.append(["Doanh thu thuan", 90_105_893_754, 80_000_000_000])
+    bctc_ws.append(["Tai san ngan han", 293_369_838_619, 250_000_000_000])
+    bctc_ws.append(["No ngan han", 165_307_940_854, 140_000_000_000])
+    bctc_ws.append(["Bao cao lap ngay 31/12/2025"])
+
+    saoke_ws = wb.create_sheet("SAO KE")
+    saoke_ws.append(["Ngay GD", "Dien giai", "So tien"])
+    for day in range(1, 20):
+        saoke_ws.append([f"{day:02d}/01/2026", f"Giao dich {day}", 1_000_000 * day])
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    client = TestClient(app)
+    resp = client.post(
+        "/api/eb/assess",
+        data={"customer_name": "ALPHA GROUP", "tax_id": "0100000001"},
+        files={"files": ("HO_SO_ALPHA_GROUP_DEMO.xlsx", buf, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+    )
+    body = resp.json()
+    assert body["ho_so_period"]["selected"] == "2025"
+    assert body["financial_inputs"]["equity_vnd"] == 580_965_107_518
+    assert body["financial_inputs"]["net_revenue_vnd"] == 90_105_893_754
+
+
 def test_export_force_cannot_bypass_balance_mismatch_hard_block():
     # S7.2(a): a balance sheet that doesn't balance is a document defect,
     # never overridable by a credit officer's force=True — unlike a SOFT
