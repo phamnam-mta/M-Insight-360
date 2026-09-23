@@ -8,14 +8,16 @@ export function AiInsightSection({
   why,
   creditMemo,
   title = "AI Insight",
+  onRetry,
 }: {
   why: string[];
   creditMemo?: string;
   title?: string;
+  onRetry?: () => void;
 }) {
   const [showDeepAnalysis, setShowDeepAnalysis] = useState(false);
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6 space-y-3">
+    <div data-testid="ai-insight-panel" className="bg-white rounded-lg shadow-sm border border-gray-100 p-6 space-y-3">
       <SectionHeader
         icon={Brain}
         title={title}
@@ -35,7 +37,14 @@ export function AiInsightSection({
           ))}
         </ul>
       ) : (
-        <p className="text-sm text-gray-500">Chưa có nhận định AI (có thể do vượt ngân sách thời gian xử lý).</p>
+        <div className="text-sm text-gray-500 space-y-2">
+          <p>Đang tổng hợp nhận định — bấm Tạo lại nhận định nếu chưa hiện sau vài giây.</p>
+          {onRetry && (
+            <button onClick={onRetry} className="text-xs font-semibold text-msb-navy underline">
+              Tạo lại nhận định
+            </button>
+          )}
+        </div>
       )}
       {showDeepAnalysis && (
         <p className="text-sm text-gray-600 border-t pt-2">
