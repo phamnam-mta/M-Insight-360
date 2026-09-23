@@ -282,3 +282,46 @@ def test_zalo_qr_endpoint_returns_placeholder(tmp_path, monkeypatch):
     resp = client.get("/api/rb-portal/zalo-bot/qr")
     assert resp.status_code == 200
     assert resp.json()["status"] == "NOT_CONNECTED"
+
+
+def _audit_actions(db_path: str, case_id: str) -> list[str]:
+    from app.storage.db import get_connection
+    conn = get_connection(db_path)
+    try:
+        rows = conn.execute(
+            "SELECT action FROM rb_case_audit WHERE case_id = ? ORDER BY id", (case_id,)
+        ).fetchall()
+        return [r["action"] for r in rows]
+    finally:
+        conn.close()
+
+
+def test_mutating_endpoints_write_audit_log_entries(tmp_path, monkeypatch):
+    # Spec requires an audit trail for case create/update/upload/assessment/
+    # export — log_audit() existed but nothing in router.py ever called it,
+    # so rb_case_audit stayed empty for every case regardless of activity.
+    db_path = str(tmp_path / "test.db")
+    monkeypatch.setenv("DB_PATH", db_path)
+    monkeypatch.setenv("CASE_FILES_DIR", str(tmp_path / "files"))
+    from app.config import get_settings
+    get_settings.cache_clear()
+    import app.agents.rb_portal.router as rb_portal_router
+    monkeypatch.setattr(rb_portal_router, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""})
+    client = TestClient(app)
+
+    case_id = client.post("/api/rb-portal/cases", json={"customer_name": "A", "tax_id": "111"}).json()["case_id"]
+    client.patch(f"/api/rb-portal/cases/{case_id}/customer", json={"full_name": "A"})
+    client.post(
+        f"/api/rb-portal/cases/{case_id}/documents",
+        data={"category": "LEGAL"},
+        files={"file": ("cccd.csv", io.BytesIO(b"CCCD"), "text/csv")},
+    )
+    client.post(f"/api/rb-portal/cases/{case_id}/preliminary-assessment")
+    client.post(f"/api/rb-portal/cases/{case_id}/export/mb01a")
+
+    actions = _audit_actions(db_path, case_id)
+    assert "CASE_CREATED" in actions
+    assert any(a.startswith("SECTION_UPDATED") for a in actions)
+    assert any(a.startswith("DOCUMENT_UPLOADED") for a in actions)
+    assert "PRELIMINARY_ASSESSMENT_RUN" in actions
+    assert "MB01A_EXPORTED" in actions

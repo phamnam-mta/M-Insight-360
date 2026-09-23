@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Banknote, CheckCircle2, ClipboardList, FileDown, FileText, FolderOpen, IdCard } from "lucide-react";
 import { RbSummary, getSummary } from "@/lib/rb-portal-api";
 import { AiInsightSection } from "../../shared/AiInsightSection";
@@ -17,11 +17,26 @@ const METRIC_LABELS: Record<string, { label: string; unit: string }> = {
   remaining_disposable_income: { label: "Thu nhập khả dụng còn lại", unit: "VND" },
 };
 
+// eligible_monthly_income and dti both require avg_monthly_revenue_vnd (true
+// business revenue, before an eligibility margin), which RB Portal never
+// collects for any case — it only collects the RM-entered income figure,
+// which feeds dsr directly instead (see assessment.py's build_loan_inputs).
+// These two metrics are therefore structurally unreachable here, not just
+// "missing for this case" — an unexplained "Chưa có dữ liệu" would wrongly
+// suggest a temporary gap the RM could fill in.
+const _STRUCTURALLY_UNREACHABLE_NOTE: Record<string, string> = {
+  eligible_monthly_income: "RB Portal không thu thập doanh thu kinh doanh nên không tính được chỉ tiêu này — xem DSR thay thế.",
+  dti: "RB Portal không thu thập doanh thu kinh doanh nên không tính được DTI — xem DSR thay thế.",
+};
+
 const MISSING_LABEL: Record<string, string> = {
-  legal_identity: "Giấy tờ định danh", id_document: "Giấy tờ pháp lý (CCCD/ĐKKD)",
-  income_section: "Thông tin nguồn thu", income_source_type: "Nguồn thu nhập chính",
-  tax_declaration: "Tờ khai thuế", loan_request: "Thông tin nhu cầu vay",
-  loan_purpose: "Mục đích vay",
+  legal_identity: "Họ tên khách hàng (tab Hồ sơ khách hàng)",
+  id_document: "Loại giấy tờ định danh (tab Pháp lý)",
+  income_section: "Thông tin nguồn thu (tab Nguồn thu)",
+  income_source_type: "Nguồn thu nhập chính (tab Nguồn thu)",
+  tax_declaration: "Xác nhận đã có tờ khai thuế (tab Nguồn thu)",
+  loan_request: "Sản phẩm vay (tab Khoản vay)",
+  loan_purpose: "Mục đích vay (tab Khoản vay)",
 };
 
 const READINESS_LABEL: Record<string, string> = {
@@ -45,6 +60,8 @@ export function SummaryTab({ caseId, onEditSection }: { caseId: string; onEditSe
   const [summary, setSummary] = useState<RbSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
 
   function reload() {
     getSummary(caseId).then(setSummary).catch((err) => setError(err instanceof Error ? err.message : "Không tải được"));
@@ -54,6 +71,7 @@ export function SummaryTab({ caseId, onEditSection }: { caseId: string; onEditSe
 
   function handleExport() {
     setExporting(true);
+    setExportError(null);
     const form = document.createElement("form");
     form.method = "POST";
     form.action = `/api/rb-portal/cases/${encodeURIComponent(caseId)}/export/mb01a`;
@@ -62,6 +80,24 @@ export function SummaryTab({ caseId, onEditSection }: { caseId: string; onEditSe
     form.submit();
     document.body.removeChild(form);
     setTimeout(() => setExporting(false), 1200);
+  }
+
+  // A successful attachment download never navigates the iframe (the browser
+  // intercepts it as a download before rendering), so this `load` firing
+  // means the server actually rendered a page into the iframe — an error
+  // response (like the Dockerfile-missing-template 500 found during Task 21),
+  // not the .docx. Previously this failed completely silently, against the
+  // "không silent fail" business rule.
+  function handleExportFrameLoad() {
+    try {
+      const doc = iframeRef.current?.contentDocument;
+      const text = doc?.body?.textContent?.trim();
+      if (text) {
+        setExportError(`Xuất tờ trình thất bại: ${text.slice(0, 200)}`);
+      }
+    } catch {
+      // cross-origin or otherwise unreadable — nothing more we can safely detect
+    }
   }
 
   if (error) return <p className="text-sm text-red-600">{error}</p>;
@@ -77,14 +113,17 @@ export function SummaryTab({ caseId, onEditSection }: { caseId: string; onEditSe
           <p className="text-xs text-gray-400">Hồ sơ &gt; {summary.case_id} &gt; Tổng hợp</p>
           <h2 className="text-lg font-bold text-msb-navy">Kết quả thẩm định sơ bộ</h2>
         </div>
-        <button
-          onClick={handleExport}
-          disabled={exporting}
-          className="inline-flex items-center gap-1.5 bg-msb-navy text-white text-sm font-semibold px-4 py-2 rounded-lg disabled:opacity-50"
-        >
-          <FileDown className="h-4 w-4" />
-          {exporting ? "Đang xuất..." : "Xuất MB01A QT.RR.038 (lần 3)"}
-        </button>
+        <div className="flex flex-col items-end gap-1">
+          <button
+            onClick={handleExport}
+            disabled={exporting}
+            className="inline-flex items-center gap-1.5 bg-msb-navy text-white text-sm font-semibold px-4 py-2 rounded-lg disabled:opacity-50"
+          >
+            <FileDown className="h-4 w-4" />
+            {exporting ? "Đang xuất..." : "Xuất MB01A QT.RR.038 (lần 3)"}
+          </button>
+          {exportError && <p className="text-xs text-red-600 max-w-xs text-right">{exportError}</p>}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
@@ -112,7 +151,13 @@ export function SummaryTab({ caseId, onEditSection }: { caseId: string; onEditSe
           {Object.entries(summary.credit_engine)
             .filter(([key]) => key in METRIC_LABELS)
             .map(([key, metric]) => (
-              <MetricCard key={key} label={METRIC_LABELS[key].label} unit={METRIC_LABELS[key].unit} metric={metric as MetricValue} />
+              <MetricCard
+                key={key}
+                label={METRIC_LABELS[key].label}
+                unit={METRIC_LABELS[key].unit}
+                metric={metric as MetricValue}
+                note={_STRUCTURALLY_UNREACHABLE_NOTE[key]}
+              />
             ))}
         </div>
       </div>
@@ -169,7 +214,7 @@ export function SummaryTab({ caseId, onEditSection }: { caseId: string; onEditSe
 
       <AiInsightSection why={summary.why} creditMemo={summary.credit_memo} title="AI Insight" />
 
-      <iframe name={EXPORT_IFRAME_NAME} className="hidden" title="Xuất MB01A" />
+      <iframe ref={iframeRef} name={EXPORT_IFRAME_NAME} className="hidden" title="Xuất MB01A" onLoad={handleExportFrameLoad} />
     </div>
   );
 }

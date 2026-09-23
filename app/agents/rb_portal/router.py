@@ -15,7 +15,7 @@ from app.storage.db import init_db
 from app.storage.files import save_case_file
 from app.storage.rb_case_repository import (
     add_document, create_case, get_case, list_assessment_versions, list_cases,
-    list_documents, save_assessment_version, update_case_section,
+    list_documents, log_audit, save_assessment_version, update_case_section,
     update_case_status, update_document_status,
 )
 
@@ -37,6 +37,7 @@ async def create_case_endpoint(payload: dict) -> dict:
     tax_id = payload["tax_id"]
     case_id = f"RB-{tax_id}-{uuid.uuid4().hex[:8]}"
     create_case(settings.db_path, case_id, customer_name, tax_id)
+    log_audit(settings.db_path, case_id, "CASE_CREATED", f"customer_name={customer_name}")
     return {"case_id": case_id}
 
 
@@ -66,6 +67,7 @@ async def update_section_endpoint(case_id: str, section: str, payload: dict) -> 
     if get_case(settings.db_path, case_id) is None:
         raise HTTPException(status_code=404, detail="Không tìm thấy hồ sơ")
     update_case_section(settings.db_path, case_id, section, payload)
+    log_audit(settings.db_path, case_id, f"SECTION_UPDATED:{section}")
     return {"status": "ok"}
 
 
@@ -108,6 +110,7 @@ async def upload_document_endpoint(
     case = get_case(settings.db_path, case_id)
     if case["status"] == "RECEIVED":
         update_case_status(settings.db_path, case_id, "DOCS_ANALYZED")
+    log_audit(settings.db_path, case_id, f"DOCUMENT_UPLOADED:{category}", file.filename)
     return {"file_id": file_id, "filename": file.filename, "category": category, "status": status}
 
 
@@ -148,6 +151,7 @@ async def run_preliminary_assessment_endpoint(case_id: str) -> dict:
         raise HTTPException(status_code=404, detail="Không tìm thấy hồ sơ")
     computed = _run_and_maybe_narrate(case_id, settings, request_start, "PRELIMINARY")
     update_case_status(settings.db_path, case_id, "PRELIM_DONE")
+    log_audit(settings.db_path, case_id, "PRELIMINARY_ASSESSMENT_RUN", computed["credit_readiness"])
     return computed
 
 
@@ -165,6 +169,7 @@ async def run_full_assessment_endpoint(case_id: str) -> dict:
         raise HTTPException(status_code=409, detail={"missing": mandatory["missing"]})
     computed = _run_and_maybe_narrate(case_id, settings, request_start, "FULL")
     update_case_status(settings.db_path, case_id, "FULL_DONE")
+    log_audit(settings.db_path, case_id, "FULL_ASSESSMENT_RUN", computed["credit_readiness"])
     return computed
 
 
@@ -249,6 +254,7 @@ async def export_mb01a_endpoint(case_id: str) -> Response:
     if case is None:
         raise HTTPException(status_code=404, detail="Không tìm thấy hồ sơ")
     docx_bytes = build_mb01a_docx(case)
+    log_audit(settings.db_path, case_id, "MB01A_EXPORTED")
     disposition = (
         f'attachment; filename="{_MB01A_EXPORT_FILENAME_ASCII}"; '
         f"filename*=UTF-8''{quote(_MB01A_EXPORT_FILENAME)}"

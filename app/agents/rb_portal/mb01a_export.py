@@ -45,9 +45,15 @@ def build_mb01a_docx(case: dict) -> bytes:
     write_value_after_label(table, 10, 0, customer.get("temporary_address"))
     write_value_after_label(table, 11, 0, customer.get("contact_address"))
     write_value_after_label(table, 13, 0, customer.get("email"))
+    write_value_after_label(table, 4, 31, customer.get("nationality"))
+    write_value_after_label(table, 12, 0, customer.get("phone_home"))
+    write_value_after_label(table, 12, 31, customer.get("phone_mobile"))
     marital_cell = _MARITAL_CELL.get(customer.get("marital_status"))
     if marital_cell is not None:
         check_box(table, _MARITAL_ROW, marital_cell, occurrence=0)
+
+    legal = case.get("legal") or {}
+    write_value_after_label(table, 5, 31, legal.get("id_issue_place"))
 
     income = case.get("income")
     if income:
@@ -93,7 +99,12 @@ def _fill_business_or_employment(table, income: dict) -> None:
         write_value_after_label(table, 33, 0, income.get("employer_name"))
         write_value_after_label(table, 34, 0, income.get("employer_address"))
         write_value_after_label(table, 36, 32, income.get("position"))
-        _write_years_months(table, 37, 0, years_run_idx=10, months_run_idx=13, years_value=income.get("employment_years"))
+        # Row 37's run layout differs from row 25's — "năm"/"tháng" are runs
+        # 18/22 here, not 10/13 (those are "tại"/" " in row 37's longer label
+        # "Thời gian đã làm việc tại cơ quan*:"). Verified directly against
+        # the template; reusing row 25's indices previously corrupted this
+        # label's text.
+        _write_years_months(table, 37, 0, years_run_idx=18, months_run_idx=22, years_value=income.get("employment_years"))
 
 
 def _fill_financial(table, income: dict) -> None:
@@ -111,7 +122,11 @@ def _fill_financial(table, income: dict) -> None:
 def _fill_loan(table, loan: dict) -> None:
     write_value_after_label(table, 85, 2, loan.get("product"))
     write_value_after_label(table, 85, 12, loan.get("purpose"))
-    write_value_after_label(table, 85, 32, loan.get("amount_vnd"))
+    # (85, 32) is "Tổng nhu cầu vốn" (total capital need) per row 84's header —
+    # a different quantity from the requested loan amount, and one the RB
+    # Portal's Loan tab does not collect. Only (85, 47) "Số tiền cấp tín dụng"
+    # gets amount_vnd; writing the same figure into both previously fabricated
+    # a "total capital need" value that was never entered.
     write_value_after_label(table, 85, 47, loan.get("amount_vnd"))
     write_value_after_label(table, 85, 63, loan.get("tenor_months"))
 
@@ -127,15 +142,21 @@ def _fill_collateral(table, collateral: dict) -> None:
     # items beyond len(_COLLATERAL_ROWS) are not exported — the legal form has no more rows.
 
 
+_CREDIT_RELATIONSHIP_ROWS = (131, 132)  # template pre-draws exactly 2 data rows (verified)
+
+
 def _fill_credit_relationships(table, other: dict) -> None:
-    relationships = (other or {}).get("existing_credit_relationships")
-    if relationships:
-        check_box(table, 128, 41, occurrence=0)  # "Đã/đang có khoản tín dụng tại MSB"
-        first = relationships[0]
-        write_value_after_label(table, 131, 0, first.get("institution"))
-        write_value_after_label(table, 131, 3, first.get("credit_type"))
-        write_value_after_label(table, 131, 42, first.get("outstanding_vnd"))
-        write_value_after_label(table, 131, 57, first.get("monthly_payment_vnd"))
-        # entries beyond the first are not exported — the legal form has only 1 pre-drawn row.
-    elif other is not None:
-        check_box(table, 128, 25, occurrence=0)  # "Chưa có"
+    # Row 128's checkbox specifically asks about a relationship "với MSB" —
+    # the RB Portal's other-tab data never records which institution, if any,
+    # is MSB, so neither "Đã/đang có ... tại MSB" nor "Chưa có" can be
+    # honestly asserted here (never fabricate a compliance fact the RM never
+    # entered). Row 129 scopes the data rows themselves to "MSB VÀ CÁC TỔ
+    # CHỨC TÍN DỤNG KHÁC", so those are still filled from whatever the RM
+    # entered, at any institution.
+    relationships = (other or {}).get("existing_credit_relationships") or []
+    for row_idx, rel in zip(_CREDIT_RELATIONSHIP_ROWS, relationships):
+        write_value_after_label(table, row_idx, 0, rel.get("institution"))
+        write_value_after_label(table, row_idx, 3, rel.get("credit_type"))
+        write_value_after_label(table, row_idx, 42, rel.get("outstanding_vnd"))
+        write_value_after_label(table, row_idx, 57, rel.get("monthly_payment_vnd"))
+    # entries beyond len(_CREDIT_RELATIONSHIP_ROWS) are not exported — the legal form has no more rows.
