@@ -28,16 +28,39 @@ export function PreCheckCard({ result }: { result: AssessmentResult }) {
   const coverage = computeCoverage(result.financial_inputs as Record<string, number> | undefined);
   const balanceMismatch = result.sanity_check?.balance_mismatch ?? false;
 
+  const sheetScan = result.sheet_scan ?? [];
+  const fileReadableNote = unreadable
+    ? "Không đọc được nội dung từ file tải lên"
+    : sheetScan.length > 0
+      ? `Đã quét ${sheetScan.length} sheet, ${sheetScan.filter((s) => s.included).length} sheet dùng làm BCTC`
+      : "Đọc được nội dung BCTC";
+
+  const sheetScanRows: CheckRow[] = sheetScan.map((s) => ({
+    label: `↳ Sheet "${s.sheet}"`,
+    pass: s.included,
+    note: s.reason,
+  }));
+
+  const namCanXacNhan = result.cot_nam?.nam_can_nguoi_dung_xac_nhan ?? false;
+
   const rows: CheckRow[] = [
     {
       label: "File đọc được",
       pass: !unreadable,
-      note: unreadable ? "Không đọc được nội dung từ file tải lên" : "Đọc được nội dung BCTC",
+      note: fileReadableNote,
     },
+    ...sheetScanRows,
     {
       label: "Kỳ báo cáo xác định được",
       pass: !!result.ho_so_period?.selected,
       note: result.ho_so_period?.selected ? `Kỳ: ${result.ho_so_period.selected}` : "Chưa xác định được kỳ báo cáo",
+    },
+    {
+      label: "Kỳ báo cáo không cần xác nhận thủ công",
+      pass: !namCanXacNhan,
+      note: namCanXacNhan
+        ? "Nhiều kỳ có trong hồ sơ và chưa được chọn tường minh — cần cán bộ xác nhận kỳ báo cáo"
+        : "Kỳ báo cáo xác định rõ ràng",
     },
     {
       label: "Cân đối kế toán: Tổng TS = Tổng NV",

@@ -442,6 +442,11 @@ export default function EbResultPanel({
           gate={gate}
           onClose={() => setGateScreenOpen(false)}
           onForceExport={() => doExport(true)}
+          onRerun={
+            result.ho_so_period?.selected
+              ? () => onRerunWithPeriod?.(result.ho_so_period!.selected!)
+              : undefined
+          }
           exporting={exporting}
         />
       )}

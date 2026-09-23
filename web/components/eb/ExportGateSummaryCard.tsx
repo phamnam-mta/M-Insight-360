@@ -52,6 +52,11 @@ export function ExportGateSummaryCard({
           </div>
         )}
         {gate.reasons.length > 0 && <div>Lý do: {gate.reasons.join("; ")}</div>}
+        {gate.loai_chan === "LECH_DU_LIEU" && (
+          <div className="text-[#e0362c]">
+            Không có nút ghi đè cho lỗi đọc dữ liệu — chạy lại trích xuất để khắc phục.
+          </div>
+        )}
       </div>
       <p className="text-xs text-gray-500">
         Bản nháp. Cán bộ có quyền ghi đè quyết định của cổng chặn kèm lý do; mọi lần ghi đè đều lưu vết.

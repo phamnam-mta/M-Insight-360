@@ -209,6 +209,7 @@ export type ExportGateInfo = {
   signals: RiskFlag[];
   data_warnings: RiskFlag[];
   reasons: string[];
+  loai_chan?: string | null;
 };
 
 export type SanityCheck = {
@@ -216,6 +217,14 @@ export type SanityCheck = {
   balance_mismatch: boolean;
   balance_mismatch_detail: string | null;
 };
+
+export type SheetScanRow = { sheet: string; included: boolean; reason: string };
+export type CotNam = {
+  nguon_nam_bao_cao: string | null;
+  cac_nam_co_trong_ho_so: string[];
+  nam_can_nguoi_dung_xac_nhan: boolean;
+};
+export type ConsistencyInfo = { khop: boolean; danh_sach_lech: Record<string, unknown>[] };
 
 export type ExportResult =
   | { blocked: true; gate: ExportGateInfo }
@@ -245,6 +254,9 @@ export type AssessmentResult = {
   financial_inputs?: FinancialInputs;
   export_gate?: ExportGateInfo;
   sanity_check?: SanityCheck;
+  sheet_scan?: SheetScanRow[];
+  cot_nam?: CotNam;
+  consistency?: ConsistencyInfo;
   // Cross-sell v3.1 fields — see comment above.
   status?: "ok" | "partial" | "blocked" | "error";
   request_id?: string;
@@ -286,6 +298,7 @@ export async function exportMb02(result: AssessmentResult, force = false): Promi
         gate: {
           verdict: body.verdict, block_type: body.block_type, signal_count: body.signal_count,
           signals: body.signals ?? [], data_warnings: [], reasons: body.reasons ?? [],
+          loai_chan: body.loai_chan ?? null,
         },
       };
     }
