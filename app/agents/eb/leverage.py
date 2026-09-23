@@ -91,3 +91,38 @@ def evaluate_rf06_receivables_inventory_concentration(
         observed_value=ratio, policy_version=RF06_POLICY_VERSION,
         evidence_refs=_evidence_for(field_evidence, "receivables_vnd", "inventory_vnd", "current_assets_vnd"),
     )
+
+
+RF08_THRESHOLD = 2.0
+RF08_POLICY_VERSION = "policy_mode=DEMO_UAT (ngưỡng demo, chưa xác nhận chuẩn MSB chính thức)"
+
+
+def evaluate_rf08_leverage(
+    total_borrowings: Metric, inputs: EbFinancialInputs, field_evidence: dict | None = None
+) -> RuleResult:
+    if total_borrowings.status == "NEED_MORE_DATA" or not inputs.equity_vnd or inputs.equity_vnd <= 0:
+        return RuleResult(
+            rule_id="RF08", rule_name="Tổng nợ vay / VCSH vượt ngưỡng", status="CHƯA ĐÁNH GIÁ",
+            comment="Thiếu tổng nợ vay hoặc vốn chủ sở hữu (hoặc VCSH ≤ 0) để tính đòn bẩy.",
+            verification_question="Hồ sơ có đủ số liệu nợ vay ngắn/dài hạn và vốn chủ sở hữu không?",
+            recommended_action="Bổ sung Bảng cân đối kế toán chi tiết trước khi đánh giá đòn bẩy.",
+            evidence_refs=_evidence_for(field_evidence, "equity_vnd"),
+        )
+    ratio = round(total_borrowings.value / inputs.equity_vnd, 4)
+    if ratio > RF08_THRESHOLD:
+        return RuleResult(
+            rule_id="RF08", rule_name="Tổng nợ vay / VCSH vượt ngưỡng", status="KÍCH HOẠT", severity="HIGH",
+            evidence=[f"Tổng nợ vay/VCSH = {ratio} (> {RF08_THRESHOLD})"],
+            threshold=f"quy tắc demo: > {RF08_THRESHOLD:.1f}x",
+            formula="tong_no_vay / von_chu_so_huu",
+            comment="Đòn bẩy tài chính cao — cần đánh giá khả năng chịu đựng thêm nợ vay và nguồn trả nợ.",
+            observed_value=ratio, policy_version=RF08_POLICY_VERSION,
+            verification_question="Cơ cấu nợ vay hiện tại và kế hoạch tăng vốn chủ sở hữu (nếu có) là gì?",
+            recommended_action="Yêu cầu phương án tăng vốn hoặc giảm đòn bẩy trước khi cấp thêm hạn mức.",
+            evidence_refs=_evidence_for(field_evidence, "equity_vnd"),
+        )
+    return RuleResult(
+        rule_id="RF08", rule_name="Tổng nợ vay / VCSH vượt ngưỡng", status="KHÔNG KÍCH HOẠT",
+        observed_value=ratio, policy_version=RF08_POLICY_VERSION,
+        evidence_refs=_evidence_for(field_evidence, "equity_vnd"),
+    )

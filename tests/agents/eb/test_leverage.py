@@ -3,7 +3,9 @@ from app.agents.eb.leverage import (
     compute_short_term_debt_ratio,
     evaluate_rf03_short_term_debt_ratio,
     evaluate_rf06_receivables_inventory_concentration,
+    evaluate_rf08_leverage,
 )
+from app.engine.core.types import Metric
 
 
 def test_ratio_computed():
@@ -67,4 +69,31 @@ def test_rf06_not_activated_below_threshold():
 
 def test_rf06_not_evaluated_without_data():
     result = evaluate_rf06_receivables_inventory_concentration(EbFinancialInputs())
+    assert result.status == "CHƯA ĐÁNH GIÁ"
+
+
+def test_rf08_fires_when_leverage_exceeds_2x():
+    borrowings = Metric(metric="total_borrowings", value=300, formula="x", input_values={}, input_sources={})
+    inputs = EbFinancialInputs(equity_vnd=100)
+    result = evaluate_rf08_leverage(borrowings, inputs)
+    assert result.rule_id == "RF08"
+    assert result.status == "KÍCH HOẠT"
+    assert result.observed_value == 3.0
+
+
+def test_rf08_not_activated_at_or_below_2x():
+    borrowings = Metric(metric="total_borrowings", value=200, formula="x", input_values={}, input_sources={})
+    inputs = EbFinancialInputs(equity_vnd=100)
+    result = evaluate_rf08_leverage(borrowings, inputs)
+    assert result.status == "KHÔNG KÍCH HOẠT"
+
+
+def test_rf08_insufficient_data_when_equity_missing_or_non_positive():
+    borrowings = Metric(metric="total_borrowings", value=300, formula="x", input_values={}, input_sources={})
+    assert evaluate_rf08_leverage(borrowings, EbFinancialInputs()).status == "CHƯA ĐÁNH GIÁ"
+    assert evaluate_rf08_leverage(borrowings, EbFinancialInputs(equity_vnd=0)).status == "CHƯA ĐÁNH GIÁ"
+
+
+def test_rf08_insufficient_data_when_borrowings_missing():
+    result = evaluate_rf08_leverage(Metric.need_more_data("total_borrowings", "x"), EbFinancialInputs(equity_vnd=100))
     assert result.status == "CHƯA ĐÁNH GIÁ"
