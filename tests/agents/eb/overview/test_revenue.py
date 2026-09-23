@@ -1,3 +1,4 @@
+from app.agents.eb.canonical import build_canonical
 from app.agents.eb.overview.revenue import evaluate_revenue_12m, evaluate_revenue_6m_statement
 from app.extraction.types import ExtractedDocument, ExtractedTable
 
@@ -12,24 +13,31 @@ def _pdf(text: str):
     return doc
 
 
+def _canonical_fields(docs):
+    canonical = build_canonical(docs)
+    if not canonical.fields_by_year:
+        return {}
+    return next(iter(canonical.fields_by_year.values()))
+
+
 def test_revenue_12m_pass_within_range():
-    row = evaluate_revenue_12m([_pdf("Doanh thu thuan: 50.000.000.000")])
+    row = evaluate_revenue_12m(_canonical_fields([_pdf("Doanh thu thuan: 50.000.000.000")]))
     assert row.result == "PASS"
     assert row.observed.value == 50_000_000_000
 
 
 def test_revenue_12m_fail_below_minimum():
-    row = evaluate_revenue_12m([_pdf("Doanh thu thuan: 5.000.000.000")])
+    row = evaluate_revenue_12m(_canonical_fields([_pdf("Doanh thu thuan: 5.000.000.000")]))
     assert row.result == "FAIL"
 
 
 def test_revenue_12m_fail_at_or_above_maximum():
-    row = evaluate_revenue_12m([_pdf("Doanh thu thuan: 1.000.000.000.000")])
+    row = evaluate_revenue_12m(_canonical_fields([_pdf("Doanh thu thuan: 1.000.000.000.000")]))
     assert row.result == "FAIL"
 
 
 def test_revenue_12m_insufficient_data_without_match():
-    row = evaluate_revenue_12m([_pdf("khong co gi")])
+    row = evaluate_revenue_12m(_canonical_fields([_pdf("khong co gi")]))
     assert row.result == "INSUFFICIENT_DATA"
 
 

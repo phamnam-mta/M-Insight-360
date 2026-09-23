@@ -1,21 +1,18 @@
-import re
-
 from app.agents.crosssell.statement_parser import parse_statement_documents
+from app.agents.eb.canonical import CanonicalField
 from app.agents.eb.policy_config import POLICY_CONFIG
 from app.engine.core.types import ConditionRow, EvidencedField, EvidenceRef
 from app.extraction.types import ExtractedDocument
 
-from ._common import build_numeric_condition
-
-_REVENUE_PATTERN = re.compile(r"doanh thu thuan[:\s]*(-?[\d.,]+)")
+from ._common import condition_from_canonical
 
 
-def evaluate_revenue_12m(documents: list[ExtractedDocument]) -> ConditionRow:
+def evaluate_revenue_12m(canonical_fields: dict[str, "CanonicalField"]) -> ConditionRow:
     min_v = POLICY_CONFIG["REVENUE_12M_MIN_VND"].value
     max_v = POLICY_CONFIG["REVENUE_12M_MAX_VND"].value
-    return build_numeric_condition(
+    return condition_from_canonical(
         condition_id="C02", condition_name="Doanh thu 12 tháng gần nhất",
-        field_id="revenue_12m_vnd", documents=documents, pattern=_REVENUE_PATTERN,
+        canonical_field=canonical_fields.get("IS_REVENUE"),
         compare_rule_text=f"≥ {min_v:,.0f} và < {max_v:,.0f} VND",
         evaluate_fn=lambda v: min_v <= v < max_v,
     )

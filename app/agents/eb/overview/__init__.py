@@ -1,3 +1,4 @@
+from app.agents.eb.canonical import CanonicalField
 from app.engine.core.types import ConditionRow
 from app.extraction.types import ExtractedDocument
 
@@ -10,18 +11,20 @@ from .partners import evaluate_top_partners
 from .revenue import evaluate_revenue_12m, evaluate_revenue_6m_statement
 
 
-def evaluate_overview(documents: list[ExtractedDocument]) -> tuple[list[ConditionRow], dict]:
+def evaluate_overview(
+    documents: list[ExtractedDocument], canonical_fields: dict[str, CanonicalField],
+) -> tuple[list[ConditionRow], dict]:
     rows = [
         evaluate_customer_segment(),
-        evaluate_revenue_12m(documents),
+        evaluate_revenue_12m(canonical_fields),
         evaluate_revenue_6m_statement(documents),
         evaluate_industry(documents),
         evaluate_operating_status(documents),
         evaluate_top_partners(documents),
         evaluate_operating_history(documents),
-        evaluate_equity(documents),
+        evaluate_equity(canonical_fields),
         evaluate_lnst_pakd(documents),
-        evaluate_gross_profit_less_interest(documents),
+        evaluate_gross_profit_less_interest(canonical_fields),
         evaluate_credit_history(),
     ]
     passed = sum(1 for r in rows if r.result == "PASS")

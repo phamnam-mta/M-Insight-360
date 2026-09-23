@@ -1,6 +1,7 @@
 import re
 from collections.abc import Callable
 
+from app.agents.eb.canonical import CanonicalField
 from app.engine.core.numbers import parse_vn_number
 from app.engine.core.types import ConditionRow, EvidencedField
 from app.extraction.evidence_search import find_all_matches
@@ -53,4 +54,33 @@ def build_numeric_condition(
     return ConditionRow(
         condition_id=condition_id, condition_name=condition_name, observed=observed,
         compare_rule=compare_rule_text, result=result,
+    )
+
+
+def condition_from_canonical(
+    condition_id: str,
+    condition_name: str,
+    canonical_field: "CanonicalField | None",
+    compare_rule_text: str,
+    evaluate_fn: Callable[[float], bool],
+    unit: str | None = "VND",
+) -> ConditionRow:
+    if canonical_field is None or not canonical_field.co_gia_tri:
+        observed = EvidencedField(
+            field_id=condition_name, label=condition_name, value=None, unit=unit,
+            period=canonical_field.nam if canonical_field else None, status="MISSING_DATA",
+        )
+        return ConditionRow(
+            condition_id=condition_id, condition_name=condition_name, observed=observed,
+            compare_rule=compare_rule_text, result="INSUFFICIENT_DATA",
+            reason_if_incomplete=f"Không tìm thấy dữ liệu cho '{condition_name}' trong hồ sơ đã tải lên.",
+        )
+    value = canonical_field.gia_tri
+    observed = EvidencedField(
+        field_id=condition_name, label=condition_name, value=value, unit=unit,
+        period=canonical_field.nam, status="COMPUTED", evidence=canonical_field.evidence,
+    )
+    return ConditionRow(
+        condition_id=condition_id, condition_name=condition_name, observed=observed,
+        compare_rule=compare_rule_text, result="PASS" if evaluate_fn(value) else "FAIL",
     )
