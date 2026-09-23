@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Banknote, CheckCircle2, ClipboardList, FileDown, FileText, FolderOpen, IdCard } from "lucide-react";
-import { RbSummary, exportMb01a, getSummary } from "@/lib/rb-portal-api";
+import { RbSummary, getSummary } from "@/lib/rb-portal-api";
 import { AiInsightSection } from "../../shared/AiInsightSection";
 import { RiskFlagsSection } from "../../shared/RiskFlagsSection";
 import { MetricCard, MetricValue } from "../../shared/MetricCard";
@@ -31,11 +31,16 @@ const READINESS_LABEL: Record<string, string> = {
   MANUAL_REVIEW_REQUIRED: "Cần thẩm định thủ công",
 };
 
-// Filename intentionally NOT set on the <a download> attribute — leaving it
-// unset lets the browser use the backend's Content-Disposition filename*
-// (see router.py's export endpoint), which carries the exact literal name
-// the brief requires ("MB01A QT.RR.038 (lần 3).docx"). Setting `.download`
-// here would silently override that with a different string.
+// Submitted as a hidden-iframe form POST rather than fetch()+blob()+<a download>:
+// a blob: URL carries no HTTP headers, so the backend's Content-Disposition
+// (which correctly RFC-5987-encodes the required Vietnamese filename) is
+// invisible to a blob download — and Chromium was confirmed during Task 21's
+// manual verification to silently discard non-ASCII `<a download>` values for
+// blob: URLs, falling back to a bare "download" name. A real form POST is a
+// normal browser-driven network download, so Content-Disposition governs the
+// filename exactly as it does for any other file download.
+const EXPORT_IFRAME_NAME = "rb-portal-export-frame";
+
 export function SummaryTab({ caseId, onEditSection }: { caseId: string; onEditSection: (tab: string) => void }) {
   const [summary, setSummary] = useState<RbSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -47,20 +52,16 @@ export function SummaryTab({ caseId, onEditSection }: { caseId: string; onEditSe
 
   useEffect(reload, [caseId]);
 
-  async function handleExport() {
+  function handleExport() {
     setExporting(true);
-    try {
-      const blob = await exportMb01a(caseId);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      alert(err instanceof Error ? err.message : "Xuất tờ trình thất bại.");
-    } finally {
-      setExporting(false);
-    }
+    const form = document.createElement("form");
+    form.method = "POST";
+    form.action = `/api/rb-portal/cases/${encodeURIComponent(caseId)}/export/mb01a`;
+    form.target = EXPORT_IFRAME_NAME;
+    document.body.appendChild(form);
+    form.submit();
+    document.body.removeChild(form);
+    setTimeout(() => setExporting(false), 1200);
   }
 
   if (error) return <p className="text-sm text-red-600">{error}</p>;
@@ -167,6 +168,8 @@ export function SummaryTab({ caseId, onEditSection }: { caseId: string; onEditSe
       </div>
 
       <AiInsightSection why={summary.why} creditMemo={summary.credit_memo} title="AI Insight" />
+
+      <iframe name={EXPORT_IFRAME_NAME} className="hidden" title="Xuất MB01A" />
     </div>
   );
 }
