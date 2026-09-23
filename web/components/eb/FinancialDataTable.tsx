@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import { MetricValue } from "../shared/MetricCard";
-import { FinancialInputs } from "@/lib/api";
+import { FinancialInputs, SanityCheck } from "@/lib/api";
 
 const FIELD_CODES: Record<string, { label: string; code: string; formula: string; group: string }> = {
   net_revenue_vnd: { label: "Doanh thu thuần", code: "IS_REVENUE", formula: "Doanh thu bán hàng − các khoản giảm trừ", group: "Kết quả kinh doanh" },
+  cogs_vnd: { label: "Giá vốn hàng bán", code: "IS_COGS", formula: "Theo BCTC", group: "Kết quả kinh doanh" },
   pbt_vnd: { label: "Lợi nhuận trước thuế", code: "IS_PBT", formula: "Theo BCTC", group: "Kết quả kinh doanh" },
   pat_vnd: { label: "Lợi nhuận sau thuế", code: "IS_PAT", formula: "Theo BCTC", group: "Kết quả kinh doanh" },
   interest_expense_vnd: { label: "Chi phí lãi vay", code: "IS_INTEREST", formula: "Theo BCTC", group: "Kết quả kinh doanh" },
@@ -14,13 +15,18 @@ const FIELD_CODES: Record<string, { label: string; code: string; formula: string
   current_assets_vnd: { label: "Tài sản ngắn hạn", code: "BS_CURRENT_ASSETS", formula: "Theo BCTC", group: "Vốn và cơ cấu" },
   current_liabilities_vnd: { label: "Nợ ngắn hạn", code: "BS_CURRENT_LIABILITIES", formula: "Theo BCTC", group: "Vốn và cơ cấu" },
   non_current_assets_vnd: { label: "Tài sản dài hạn", code: "BS_NON_CURRENT_ASSETS", formula: "Theo BCTC", group: "Vốn và cơ cấu" },
+  charter_capital_vnd: { label: "Vốn điều lệ", code: "BS_CHARTER_CAPITAL", formula: "Theo BCTC", group: "Vốn và cơ cấu" },
   long_term_capital: { label: "Nguồn vốn dài hạn", code: "BS_LONG_TERM_CAPITAL", formula: "VCSH + Nợ dài hạn", group: "Vốn và cơ cấu" },
   total_borrowings: { label: "Tổng nợ vay", code: "BS_TOTAL_BORROWINGS", formula: "Vay ngắn hạn + dài hạn + thuê tài chính", group: "Vốn và cơ cấu" },
-  receivables_vnd: { label: "Phải thu khách hàng", code: "BS003", formula: "Theo BCTC", group: "Vốn và cơ cấu" },
-  inventory_vnd: { label: "Hàng tồn kho", code: "BS004", formula: "Theo BCTC", group: "Vốn và cơ cấu" },
-  payables_vnd: { label: "Phải trả người bán", code: "BS005", formula: "Theo BCTC", group: "Vốn và cơ cấu" },
-  equity_vnd: { label: "Vốn chủ sở hữu", code: "BS008", formula: "Theo BCTC", group: "Vốn và cơ cấu" },
+  receivables_vnd: { label: "Phải thu khách hàng", code: "BS_AR_CUSTOMER", formula: "Theo BCTC", group: "Vốn và cơ cấu" },
+  inventory_vnd: { label: "Hàng tồn kho", code: "BS_INVENTORY", formula: "Theo BCTC", group: "Vốn và cơ cấu" },
+  payables_vnd: { label: "Phải trả người bán", code: "BS_AP_SUPPLIER", formula: "Theo BCTC", group: "Vốn và cơ cấu" },
+  equity_vnd: { label: "Vốn chủ sở hữu", code: "BS_EQUITY", formula: "Theo BCTC", group: "Vốn và cơ cấu" },
   cash_vnd: { label: "Tiền và tương đương tiền", code: "BS_CASH", formula: "Theo BCTC", group: "Vốn và cơ cấu" },
+  nwc: { label: "Vốn lưu động ròng", code: "CALC_NWC", formula: "TSNH − Nợ NH", group: "Chỉ số tín dụng" },
+  current_ratio: { label: "Khả năng thanh toán hiện hành", code: "CALC_CURRENT_RATIO", formula: "TSNH / Nợ NH", group: "Chỉ số tín dụng" },
+  dscr: { label: "DSCR", code: "CALC_DSCR", formula: "(LNST + Khấu hao + Lãi vay) / (Nợ gốc + Lãi vay đến hạn)", group: "Chỉ số tín dụng" },
+  icr: { label: "ICR", code: "CALC_ICR", formula: "EBIT / Chi phí lãi vay", group: "Chỉ số tín dụng" },
 };
 
 function formatVndSmart(value: unknown): string {
@@ -32,12 +38,16 @@ function formatVndSmart(value: unknown): string {
 }
 
 export function FinancialDataTable({
-  creditEngine, financialInputs,
-}: { creditEngine?: Record<string, MetricValue>; financialInputs?: FinancialInputs }) {
+  creditEngine, financialInputs, sanityCheck,
+}: { creditEngine?: Record<string, MetricValue>; financialInputs?: FinancialInputs; sanityCheck?: SanityCheck }) {
   const [openRow, setOpenRow] = useState<string | null>(null);
-  const groups = ["Kết quả kinh doanh", "Vốn và cơ cấu"];
+  const groups = ["Kết quả kinh doanh", "Vốn và cơ cấu", "Chỉ số tín dụng"];
 
-  function rowValue(key: string): { value: unknown; source?: string } {
+  function rowValue(key: string): { value: unknown; source?: string; suspectReason?: string } {
+    const suspectReason = sanityCheck?.suspect_fields[key];
+    if (suspectReason) {
+      return { value: undefined, suspectReason };
+    }
     // Raw extracted BCTC fields read straight from financial_inputs — the
     // only reliable source, since not every field is cited in some metric's
     // input_values (e.g. inventory_vnd, payables_vnd, cash_vnd,
@@ -45,9 +55,9 @@ export function FinancialDataTable({
     if (financialInputs && typeof financialInputs[key] === "number") {
       return { value: financialInputs[key], source: "bctc" };
     }
-    if (key === "ebitda" || key === "long_term_capital" || key === "total_borrowings") {
+    if (["ebitda", "long_term_capital", "total_borrowings", "nwc", "current_ratio", "dscr", "icr"].includes(key)) {
       const m = creditEngine?.[key];
-      return { value: m?.value, source: "computed" };
+      return { value: m?.status === "OK" ? m.value : undefined, source: "computed" };
     }
     return { value: undefined };
   }
@@ -67,7 +77,7 @@ export function FinancialDataTable({
               {Object.entries(FIELD_CODES)
                 .filter(([, meta]) => meta.group === group)
                 .map(([key, meta]) => {
-                  const { value, source } = rowValue(key);
+                  const { value, source, suspectReason } = rowValue(key);
                   const hasValue = typeof value === "number";
                   return (
                     <tr key={key} className="border-b border-gray-50 last:border-0">
@@ -83,12 +93,13 @@ export function FinancialDataTable({
                         {openRow === key && <p className="text-[11px] text-gray-500 mt-1">{meta.formula}</p>}
                       </td>
                       <td className="py-2 text-right align-top break-words">
-                        <span className={hasValue ? "text-msb-navy font-medium" : "text-gray-400"}>
-                          {hasValue ? formatVndSmart(value) : "Chưa xác định từ hồ sơ tải lên"}
+                        <span className={hasValue ? "text-msb-navy font-medium" : "text-amber-600"}>
+                          {hasValue ? formatVndSmart(value) : suspectReason ? "— (nghi ngờ sai dòng)" : "Chưa xác định từ hồ sơ tải lên"}
                         </span>
                         <span className="block text-[10px] text-gray-400">
                           {source === "manual_rm_input" ? "Người dùng điều chỉnh" : hasValue ? "AI trích xuất" : ""}
                         </span>
+                        {suspectReason && <p className="text-[10px] text-amber-600 mt-0.5">{suspectReason}</p>}
                       </td>
                     </tr>
                   );

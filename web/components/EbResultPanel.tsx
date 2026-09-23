@@ -267,6 +267,7 @@ export default function EbResultPanel({
           <FinancialDataTable
             creditEngine={ce}
             financialInputs={result.financial_inputs}
+            sanityCheck={result.sanity_check}
           />
         </div>
 
