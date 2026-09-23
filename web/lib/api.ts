@@ -73,6 +73,7 @@ export type RiskFlag = {
   evidence_refs?: Record<string, EvidenceRef[]>;
   impact?: string;
   recommended_action?: string;
+  observed_value?: number | string | null;
 };
 
 // Cross-sell v3.1 — POST /api/crosssell/assess returns a JSON shape driven
@@ -201,6 +202,25 @@ export async function fetchStressScenarios(caseId: string): Promise<StressScenar
   return body.scenarios ?? [];
 }
 
+export type ExportGateInfo = {
+  verdict: "XUAT" | "XUAT_KEM_CANH_BAO" | "KHONG_XUAT_TU_DONG";
+  block_type: "HARD" | "SOFT" | null;
+  signal_count: number;
+  signals: RiskFlag[];
+  data_warnings: RiskFlag[];
+  reasons: string[];
+};
+
+export type SanityCheck = {
+  suspect_fields: Record<string, string>;
+  balance_mismatch: boolean;
+  balance_mismatch_detail: string | null;
+};
+
+export type ExportResult =
+  | { blocked: true; gate: ExportGateInfo }
+  | { blocked: false; blob: Blob; filename: string };
+
 export type AssessmentResult = {
   case_id?: string;
   assessed_at?: string;
@@ -223,6 +243,8 @@ export type AssessmentResult = {
   ho_so_period?: HoSoPeriod;
   capital_balance_check?: CapitalBalanceCheck;
   financial_inputs?: FinancialInputs;
+  export_gate?: ExportGateInfo;
+  sanity_check?: SanityCheck;
   // Cross-sell v3.1 fields — see comment above.
   status?: "ok" | "partial" | "blocked" | "error";
   request_id?: string;
@@ -249,14 +271,32 @@ export type AssessmentResult = {
   error_code?: string | null;
 };
 
-export async function exportMb02(result: AssessmentResult): Promise<Blob> {
+export async function exportMb02(result: AssessmentResult, force = false): Promise<ExportResult> {
   const resp = await fetch("/api/eb/export", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(result),
+    body: JSON.stringify({ computed: result, force }),
   });
+  const contentType = resp.headers.get("content-type") ?? "";
+  if (contentType.includes("application/json")) {
+    const body = await resp.json();
+    if (body.export_blocked) {
+      return {
+        blocked: true,
+        gate: {
+          verdict: body.verdict, block_type: body.block_type, signal_count: body.signal_count,
+          signals: body.signals ?? [], data_warnings: [], reasons: body.reasons ?? [],
+        },
+      };
+    }
+    throw new Error("Xuất tờ trình thất bại: phản hồi không hợp lệ.");
+  }
   if (!resp.ok) throw new Error(`Xuất tờ trình thất bại: HTTP ${resp.status}`);
-  return resp.blob();
+  const blob = await resp.blob();
+  const disposition = resp.headers.get("content-disposition") || "";
+  const match = disposition.match(/filename="?([^";]+)"?/);
+  const filename = match ? match[1] : "to-trinh-mb02-du-thao_BANNHAP.docx";
+  return { blocked: false, blob, filename };
 }
 
 export async function runAssessment(

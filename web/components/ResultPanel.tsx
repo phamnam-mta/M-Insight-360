@@ -85,11 +85,15 @@ export default function ResultPanel({ result }: { result: AssessmentResult }) {
           <button
             onClick={async () => {
               try {
-                const blob = await exportMb02(result);
-                const url = URL.createObjectURL(blob);
+                const outcome = await exportMb02(result);
+                if (outcome.blocked) {
+                  alert("Xuất tờ trình thất bại: hồ sơ bị chặn xuất tự động.");
+                  return;
+                }
+                const url = URL.createObjectURL(outcome.blob);
                 const a = document.createElement("a");
                 a.href = url;
-                a.download = "to-trinh-mb02-du-thao.docx";
+                a.download = outcome.filename;
                 a.click();
                 URL.revokeObjectURL(url);
               } catch (err) {

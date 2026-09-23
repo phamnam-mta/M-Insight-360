@@ -28,6 +28,7 @@ import { useState } from "react";
 import { CompanyInfoBlock } from "./eb/CompanyInfoBlock";
 import { FinancialDataTable } from "./eb/FinancialDataTable";
 import { CapitalBalanceDiagram } from "./eb/CapitalBalanceDiagram";
+import { ExportGateScreen } from "./eb/ExportGateScreen";
 import { Qd039Card } from "./eb/Qd039Card";
 import { EbRiskFlagsPriorityList } from "./eb/EbRiskFlagsPriorityList";
 import { LockedPlaceholders } from "./eb/LockedPlaceholders";
@@ -199,6 +200,44 @@ export default function EbResultPanel({
   const overview = result.overview ?? [];
   const summary = result.overview_summary;
   const [stressOpen, setStressOpen] = useState(false);
+  const gate = result.export_gate;
+  const [gateScreenOpen, setGateScreenOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
+
+  async function doExport(force: boolean) {
+    setExporting(true);
+    try {
+      const outcome = await exportMb02(result, force);
+      if (outcome.blocked) {
+        setGateScreenOpen(true);
+      } else {
+        const url = URL.createObjectURL(outcome.blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = outcome.filename;
+        a.click();
+        URL.revokeObjectURL(url);
+        setGateScreenOpen(false);
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Xuất tờ trình thất bại.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  function exportButtonProps(): { label: string; sub?: string; cls: string; disabled: boolean } {
+    if (!gate || gate.verdict === "XUAT") {
+      return { label: "Soạn tờ trình MB02a", sub: gate ? `Điền sẵn dữ liệu từ BCTC kỳ ${result.ho_so_period?.selected ?? "—"}` : undefined, cls: "bg-msb-orange text-white", disabled: false };
+    }
+    if (gate.verdict === "XUAT_KEM_CANH_BAO") {
+      return { label: "Soạn tờ trình MB02a ⚠", sub: `${gate.signal_count} tín hiệu cần thẩm định thêm — bản nháp sẽ có banner cảnh báo`, cls: "bg-msb-orange text-white", disabled: false };
+    }
+    if (gate.block_type === "HARD") {
+      return { label: "Soạn tờ trình MB02a", sub: "Hồ sơ khách hàng cung cấp chưa đầy đủ — đề nghị bổ sung bản chuẩn", cls: "bg-gray-200 text-gray-400", disabled: true };
+    }
+    return { label: "Soạn tờ trình MB02a", sub: `Chưa xuất tự động — ${gate.signal_count} tín hiệu cần thẩm định thêm`, cls: "bg-gray-200 text-gray-600", disabled: false };
+  }
 
   const coverage = computeCoverage(result.financial_inputs as Record<string, number> | undefined);
   const lowCoverageMode = coverage < 30;
@@ -308,32 +347,22 @@ export default function EbResultPanel({
               >
                 Stress Test
               </button>
-              {result.export_available && (
-                <button
-                  onClick={async () => {
-                    // TODO(Task 15): replace with the S7-gate-aware flow
-                    // (409 refusal → ExportGateScreen, force override,
-                    // Content-Disposition-derived filename).
-                    try {
-                      const blob = await exportMb02(result);
-                      const url = URL.createObjectURL(blob);
-                      const a = document.createElement("a");
-                      a.href = url;
-                      a.download = "to-trinh-mb02-du-thao.docx";
-                      a.click();
-                      URL.revokeObjectURL(url);
-                    } catch (err) {
-                      alert(err instanceof Error ? err.message : "Xuất tờ trình thất bại.");
-                    }
-                  }}
-                  className="text-xs font-semibold px-3 py-2 rounded-lg border border-msb-navy text-msb-navy"
-                >
-                  <span className="inline-flex items-center gap-1.5">
-                    <FileDown className="h-3.5 w-3.5" />
-                    Soạn tờ trình MB02a
-                  </span>
-                </button>
-              )}
+              {result.export_available && (() => {
+                const btn = exportButtonProps();
+                return (
+                  <button
+                    onClick={() => (gate?.verdict === "KHONG_XUAT_TU_DONG" ? setGateScreenOpen(true) : doExport(false))}
+                    disabled={btn.disabled || exporting}
+                    className={`text-xs font-semibold px-3 py-2 rounded-lg disabled:opacity-50 ${btn.cls}`}
+                  >
+                    <span className="inline-flex items-center gap-1.5">
+                      <FileDown className="h-3.5 w-3.5" />
+                      {btn.label}
+                    </span>
+                    {btn.sub && <span className="block text-[10px] opacity-80 mt-0.5">{btn.sub}</span>}
+                  </button>
+                );
+              })()}
             </div>
           </div>
 
@@ -343,6 +372,14 @@ export default function EbResultPanel({
       </div>
 
       <StressTestDrawer open={stressOpen} onClose={() => setStressOpen(false)} result={result} />
+      {gateScreenOpen && gate && (
+        <ExportGateScreen
+          gate={gate}
+          onClose={() => setGateScreenOpen(false)}
+          onForceExport={() => doExport(true)}
+          exporting={exporting}
+        />
+      )}
     </div>
   );
 }
