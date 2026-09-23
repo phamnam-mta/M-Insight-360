@@ -237,15 +237,15 @@ export default function EbResultPanel({
 
   function exportButtonProps(): { label: string; sub?: string; cls: string; disabled: boolean } {
     if (!gate || gate.verdict === "XUAT") {
-      return { label: "Soạn tờ trình MB02a", sub: gate ? `Điền sẵn dữ liệu từ BCTC kỳ ${result.ho_so_period?.selected ?? "—"}` : undefined, cls: "bg-msb-orange text-white", disabled: false };
+      return { label: "Xuất tờ trình MB02a", sub: gate ? `Điền sẵn dữ liệu từ BCTC kỳ ${result.ho_so_period?.selected ?? "—"}` : undefined, cls: "bg-msb-orange text-white", disabled: false };
     }
     if (gate.verdict === "XUAT_KEM_CANH_BAO") {
-      return { label: "Soạn tờ trình MB02a ⚠", sub: `${gate.signal_count} tín hiệu cần thẩm định thêm — bản nháp sẽ có banner cảnh báo`, cls: "bg-msb-orange text-white", disabled: false };
+      return { label: "Xuất tờ trình MB02a ⚠", sub: `${gate.signal_count} tín hiệu cần thẩm định thêm — bản nháp sẽ có banner cảnh báo`, cls: "bg-msb-orange text-white", disabled: false };
     }
     if (gate.block_type === "HARD") {
-      return { label: "Soạn tờ trình MB02a", sub: "Hồ sơ khách hàng cung cấp chưa đầy đủ — đề nghị bổ sung bản chuẩn", cls: "bg-gray-200 text-gray-400", disabled: true };
+      return { label: "Xuất tờ trình MB02a", sub: "Hồ sơ khách hàng cung cấp chưa đầy đủ — đề nghị bổ sung bản chuẩn", cls: "bg-gray-200 text-gray-400", disabled: true };
     }
-    return { label: "Soạn tờ trình MB02a", sub: `Chưa xuất tự động — ${gate.signal_count} tín hiệu cần thẩm định thêm`, cls: "bg-gray-200 text-gray-600", disabled: false };
+    return { label: "Xuất tờ trình MB02a", sub: `Chưa xuất tự động — ${gate.signal_count} tín hiệu cần thẩm định thêm`, cls: "bg-gray-200 text-gray-600", disabled: false };
   }
 
   const coverage = computeCoverage(result.financial_inputs as Record<string, number> | undefined);

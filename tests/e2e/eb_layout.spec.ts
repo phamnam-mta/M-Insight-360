@@ -96,7 +96,7 @@ test.describe("EB result panel — v2.3 layout (Phần C, T22-T28)", () => {
     await openEbResult(page);
     const panel = page.locator('[data-testid="eb-r1-panel"]');
     await expect(panel.getByRole("button", { name: /Stress Test/ })).toBeVisible();
-    await expect(panel.getByRole("button", { name: /Soạn tờ trình MB02a/ })).toBeVisible();
+    await expect(panel.getByRole("button", { name: /Xuất tờ trình MB02a/ })).toBeVisible();
   });
 
   test("T26: empty AI narrative never shows the banned technical phrase", async ({ page }) => {
