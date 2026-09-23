@@ -303,7 +303,7 @@ def test_assess_endpoint_includes_overview_and_never_shows_ready_without_full_ch
     assert "credit_engine" in body and "output_contract_financing_ratio" in body["credit_engine"]
 
 
-def test_assess_endpoint_opportunities_empty_without_statement(monkeypatch, tmp_path):
+def test_assess_response_has_no_crosssell_key(monkeypatch, tmp_path):
     monkeypatch.setenv("DB_PATH", str(tmp_path / "test12.db"))
     monkeypatch.setenv("CASE_FILES_DIR", str(tmp_path / "eb_files"))
     from app.config import get_settings
@@ -314,7 +314,48 @@ def test_assess_endpoint_opportunities_empty_without_statement(monkeypatch, tmp_
     files = {"files": ("bctc.csv", io.BytesIO(b"Von chu so huu: 500.000.000\n"), "text/csv")}
     with TestClient(app) as client:
         resp = client.post("/api/eb/assess", data={"customer_name": "A", "tax_id": "0100000001"}, files=files)
-    assert resp.json()["crosssell_opportunities"] == []
+    assert "crosssell_opportunities" not in resp.json()
+
+
+def test_assess_response_has_export_gate_and_sanity_check(monkeypatch, tmp_path):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test_gate.db"))
+    monkeypatch.setenv("CASE_FILES_DIR", str(tmp_path / "eb_files_gate"))
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    monkeypatch.setattr(eb_router, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""})
+
+    files = {"files": ("bctc.csv", io.BytesIO(b"Von chu so huu: 500.000.000\n"), "text/csv")}
+    with TestClient(app) as client:
+        resp = client.post("/api/eb/assess", data={"customer_name": "A", "tax_id": "0100000001"}, files=files)
+    body = resp.json()
+    assert body["export_gate"]["verdict"] in ("XUAT", "XUAT_KEM_CANH_BAO", "KHONG_XUAT_TU_DONG")
+    assert "sanity_check" in body
+
+
+def test_assess_response_includes_rf08_and_rf09(monkeypatch, tmp_path):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test_rf0809.db"))
+    monkeypatch.setenv("CASE_FILES_DIR", str(tmp_path / "eb_files_rf0809"))
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    monkeypatch.setattr(eb_router, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""})
+
+    csv_text = (
+        b"Chi tieu,31/12/2025\n"
+        b"Von chu so huu,500000000\n"
+        b"Tai san ngan han,300000000\n"
+        b"No ngan han,100000000\n"
+        b"Loi nhuan truoc thue,200000000\n"
+        b"Loi nhuan sau thue,160000000\n"
+        b"Chi phi lai vay,50000000\n"
+    )
+    files = {"files": ("bctc.csv", io.BytesIO(csv_text), "text/csv")}
+    with TestClient(app) as client:
+        resp = client.post("/api/eb/assess", data={"customer_name": "A", "tax_id": "0100000001"}, files=files)
+    body = resp.json()
+    rule_ids = {f["rule_id"] for f in body["risk_flags"]}
+    assert {"RF08", "RF09"}.issubset(rule_ids)
 
 
 def test_assess_endpoint_includes_new_metrics_and_flags(monkeypatch, tmp_path):

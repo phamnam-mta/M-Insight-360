@@ -22,15 +22,16 @@ from .capital_structure import (
 )
 from .cashflow_flags import evaluate_rf02_negative_cfo
 from .contract_financing import compute_output_contract_financing_ratio, compute_receivables_financing_limit
-from .crosssell_adapter import evaluate_crosssell_opportunities
 from .document_check import MANDATORY_DOC_TYPES, classify_documents, missing_from_classified
 from .document_status import build_document_status_list
 from .dsp_reconciliation import evaluate_rf04_dsp_mismatch
+from .export_gate import evaluate_export_gate
 from .financial_inputs import EbFinancialInputs, extract_period_aware_financial_inputs
 from .leverage import (
     compute_short_term_debt_ratio,
     evaluate_rf03_short_term_debt_ratio,
     evaluate_rf06_receivables_inventory_concentration,
+    evaluate_rf08_leverage,
 )
 from .liquidity import compute_current_ratio, compute_nwc, evaluate_rf01_capital_imbalance
 from .mb02_export import build_mb02_docx
@@ -41,9 +42,11 @@ from .profitability import compute_ebitda
 from .repayment_capacity import (
     compute_dscr,
     compute_icr,
-    evaluate_rf05_weak_repayment_capacity,
+    evaluate_rf05_dscr_weak,
     evaluate_rf07_high_interest_burden,
+    evaluate_rf09_icr_weak,
 )
+from .sanity_checks import run_sanity_checks
 from .stress_scenarios import list_scenarios, save_scenario
 from .stress_test import run_stress_test
 
@@ -154,7 +157,9 @@ async def assess(
             evaluate_rf02_negative_cfo(financial_inputs, field_evidence),
             evaluate_rf03_short_term_debt_ratio(short_term_debt_ratio, field_evidence),
             evaluate_rf04_dsp_mismatch(financial_inputs, field_evidence),
-            evaluate_rf05_weak_repayment_capacity(dscr, icr, field_evidence),
+            evaluate_rf05_dscr_weak(dscr, field_evidence),
+            evaluate_rf09_icr_weak(icr, field_evidence),
+            evaluate_rf08_leverage(total_borrowings, financial_inputs, field_evidence),
             evaluate_rf06_receivables_inventory_concentration(financial_inputs, field_evidence),
             evaluate_rf07_high_interest_burden(financial_inputs, field_evidence),
         ]
@@ -185,7 +190,19 @@ async def assess(
             "receivables_financing_limit_80": receivables_financing_limit_80,
             "receivables_financing_limit_85": receivables_financing_limit_85,
         }
-        opportunities = evaluate_crosssell_opportunities(documents)
+
+        sanity_result = run_sanity_checks(financial_inputs, selected_period)
+        gate_result = evaluate_export_gate(
+            risk_flags, equity_vnd=financial_inputs.equity_vnd, dscr=dscr, icr=icr,
+            pre_check_blocked=bool(extraction_warnings) and not any(
+                v is not None for v in asdict(financial_inputs).values()
+            ),
+            # TODO(personal-vs-legal-entity detection): this codebase has no
+            # BCTC classifier for personal/household filings yet (out of
+            # scope per the v2.3 rebuild spec's extraction-layer boundary);
+            # hard-block (b) is unreachable until that classifier exists.
+            is_legal_entity=True,
+        )
 
         if missing:
             credit_readiness, recommendation = "NOT_READY", "ADDITIONAL_DOCUMENTS_REQUIRED"
@@ -215,14 +232,15 @@ async def assess(
             "overview_summary": overview_summary,
             "overall_conclusion": overall_conclusion,
             "documents": build_document_status_list(documents, extraction_warnings, overview_rows, metrics_by_name),
-            # Named distinctly from Cross-sell's own "opportunities" field
-            # (a differently-shaped RiskFlag[] on /api/crosssell/assess) so
-            # one AssessmentResult type on the frontend never has to union
-            # two incompatible shapes under the same key.
-            "crosssell_opportunities": opportunities,
             "export_available": True,
             "ho_so_period": ho_so_period,
             "capital_balance_check": capital_balance_check,
+            "export_gate": asdict(gate_result),
+            "sanity_check": {
+                "suspect_fields": sanity_result.suspect_fields,
+                "balance_mismatch": sanity_result.balance_mismatch,
+                "balance_mismatch_detail": sanity_result.balance_mismatch_detail,
+            },
             # Raw extracted BCTC field values, independent of which metrics
             # happen to cite them in their own input_values — the frontend's
             # FinancialDataTable and StressTestDrawer read from this channel
