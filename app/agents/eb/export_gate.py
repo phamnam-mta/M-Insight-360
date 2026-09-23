@@ -39,6 +39,7 @@ class ExportGateResult:
     signals: list[RuleResult] = field(default_factory=list)
     data_warnings: list[RuleResult] = field(default_factory=list)
     reasons: list[str] = field(default_factory=list)
+    loai_chan: str | None = None
 
 
 def evaluate_export_gate(
@@ -49,11 +50,18 @@ def evaluate_export_gate(
     icr: Metric,
     pre_check_blocked: bool = False,
     is_legal_entity: bool = True,
+    loai_chan: str | None = None,
 ) -> ExportGateResult:
     if pre_check_blocked:
+        reason = (
+            "Hệ thống đọc ra hai kết quả khác nhau cho cùng một chỉ tiêu nên tạm dừng xuất tờ trình "
+            "để anh/chị kiểm tra lại, tránh tờ trình mang số liệu không thống nhất."
+            if loai_chan == "LECH_DU_LIEU"
+            else "Hồ sơ khách hàng cung cấp chưa đầy đủ — không đọc được nội dung BCTC tải lên."
+        )
         return ExportGateResult(
             verdict="KHONG_XUAT_TU_DONG", block_type="HARD", signal_count=0,
-            reasons=["Hồ sơ khách hàng cung cấp chưa đầy đủ — không đọc được nội dung BCTC tải lên."],
+            reasons=[reason], loai_chan=loai_chan,
         )
     if not is_legal_entity:
         return ExportGateResult(

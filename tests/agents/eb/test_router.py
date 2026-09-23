@@ -804,3 +804,102 @@ def test_save_and_list_stress_scenario_endpoints(tmp_path, monkeypatch):
         list_resp = client.get("/api/eb/stress-test/scenarios", params={"case_id": "EB-123"})
     assert list_resp.status_code == 200
     assert list_resp.json()["scenarios"][0]["name"] == "Bất lợi"
+
+
+def test_assess_endpoint_exposes_sheet_scan_and_cot_nam_and_canonical(monkeypatch, tmp_path):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test_v24.db"))
+    monkeypatch.setenv("CASE_FILES_DIR", str(tmp_path / "eb_files_v24"))
+    from app.config import get_settings
+    get_settings.cache_clear()
+    monkeypatch.setattr(eb_router, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""})
+
+    import openpyxl
+    wb = openpyxl.Workbook()
+    bctc = wb.active
+    bctc.title = "10_BCTC_TOM_TAT"
+    bctc.append(["BAO CAO TAI CHINH TOM TAT - BANG CAN DOI KE TOAN"])
+    bctc.append(["Chi tieu", "So cuoi nam", "So dau nam"])
+    bctc.append(["Von chu so huu", 580965107518, 500000000000])
+    bctc.append(["Bao cao lap ngay 31/12/2025"])
+    saoke = wb.create_sheet("SAO KE")
+    saoke.append(["Ngay GD", "So tien"])
+    for d in range(1, 15):
+        saoke.append([f"{d:02d}/01/2026", 1000000 * d])
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    client = TestClient(app)
+    resp = client.post(
+        "/api/eb/assess",
+        data={"customer_name": "A", "tax_id": "0100000001"},
+        files={"files": ("f.xlsx", buf, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+    )
+    body = resp.json()
+    assert body["ho_so_period"]["selected"] == "2025"
+    sheet_names = {s["sheet"]: s["included"] for s in body["sheet_scan"]}
+    assert sheet_names["10_BCTC_TOM_TAT"] is True
+    assert sheet_names["SAO KE"] is False
+    assert body["cot_nam"]["nguon_nam_bao_cao"]
+    assert "2025" in body["cot_nam"]["cac_nam_co_trong_ho_so"]
+    assert body["consistency"]["khop"] is True
+    assert body["canonical"]["BS_EQUITY"]["gia_tri"] == 580965107518.0
+
+
+def test_assess_endpoint_sheets_all_includes_bank_statement(monkeypatch, tmp_path):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test_v24b.db"))
+    monkeypatch.setenv("CASE_FILES_DIR", str(tmp_path / "eb_files_v24b"))
+    from app.config import get_settings
+    get_settings.cache_clear()
+    monkeypatch.setattr(eb_router, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""})
+
+    import openpyxl
+    wb = openpyxl.Workbook()
+    saoke = wb.active
+    saoke.title = "SAO KE"
+    saoke.append(["Ngay GD", "So tien"])
+    for d in range(1, 5):
+        saoke.append([f"{d:02d}/01/2026", 1000000 * d])
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    client = TestClient(app)
+    resp = client.post(
+        "/api/eb/assess",
+        data={"customer_name": "A", "tax_id": "0100000001", "sheets": "all"},
+        files={"files": ("f.xlsx", buf, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+    )
+    body = resp.json()
+    sheet_names = {s["sheet"]: s["included"] for s in body["sheet_scan"]}
+    assert sheet_names["SAO KE"] is True
+
+
+def test_assess_endpoint_bank_statement_only_upload_still_hard_blocks(monkeypatch, tmp_path):
+    # Review Focus #5 — zero BCTC-included sheets must not be mistaken for
+    # "extracted successfully, all fields legitimately missing."
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test_v24c.db"))
+    monkeypatch.setenv("CASE_FILES_DIR", str(tmp_path / "eb_files_v24c"))
+    from app.config import get_settings
+    get_settings.cache_clear()
+    monkeypatch.setattr(eb_router, "generate_narrative", lambda computed: {"why": [], "credit_memo": ""})
+
+    import openpyxl
+    wb = openpyxl.Workbook()
+    saoke = wb.active
+    saoke.title = "SAO KE"
+    saoke.append(["Ngay GD", "So tien"])
+    saoke.append(["01/01/2026", "1000000"])
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    client = TestClient(app)
+    resp = client.post(
+        "/api/eb/assess",
+        data={"customer_name": "A", "tax_id": "0100000001"},
+        files={"files": ("f.xlsx", buf, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+    )
+    body = resp.json()
+    assert body["export_gate"]["verdict"] == "KHONG_XUAT_TU_DONG"
+    assert body["export_gate"]["block_type"] == "HARD"

@@ -35,7 +35,11 @@ _FIELD_PATTERNS: dict[str, re.Pattern] = {
     "BS_INVENTORY": re.compile(r"hang ton kho[:\s]*(-?[\d.,]+)"),
     "BS_AP_SUPPLIER": re.compile(r"phai tra nguoi ban[:\s]*(-?[\d.,]+)"),
     "BS_CASH": re.compile(r"tien va tuong duong tien[:\s]*(-?[\d.,]+)"),
-    "DEBT_PRINCIPAL_DUE": re.compile(r"no goc den han[:\s]*(-?[\d.,]+)"),
+    # No "no" (Nợ) prefix required, matching the pre-refactor
+    # financial_inputs.py._FIELD_PATTERNS["principal_due_vnd"] pattern
+    # exactly — "no goc den han" is a strict superset match of "goc den
+    # han", so this only ever adds matches, never removes any.
+    "DEBT_PRINCIPAL_DUE": re.compile(r"goc den han[:\s]*(-?[\d.,]+)"),
     "CFO": re.compile(r"luu chuyen tien thuan tu hoat dong kinh doanh[:\s]*(-?[\d.,]+)"),
     # Internal fields (no H4 instruction code): ported verbatim from the old
     # financial_inputs.py._FIELD_PATTERNS so repayment_capacity.py,
@@ -212,9 +216,20 @@ def build_canonical(
     for doc in documents:
         included_tables: list[ExtractedTable] = []
         for table in doc.tables:
-            included, reason = classify_sheet(table)
-            if include_all_sheets:
-                included, reason = True, "sheets=all — quét toàn bộ theo yêu cầu người dùng"
+            if doc.doc_type == "xlsx":
+                included, reason = classify_sheet(table)
+                if include_all_sheets:
+                    included, reason = True, "sheets=all — quét toàn bộ theo yêu cầu người dùng"
+            else:
+                # The multi-sheet "which sheet is BCTC" question only makes
+                # sense for a real xlsx workbook. A CSV always parses into
+                # exactly one line-per-row pseudo-table (see xlsx_csv_parser
+                # .extract_csv), and a PDF/docx table is part of a single
+                # narrative document — there is no "other sheet" to filter
+                # against, so classify_sheet's content-density bar (tuned
+                # for genuine multi-column BCTC tables) would only silently
+                # drop a terse but real upload.
+                included, reason = True, "Định dạng tệp không phải workbook nhiều sheet — không áp dụng phân loại sheet"
             sheet_scan.append(SheetScanResult(sheet=table.sheet_or_page, included=included, reason=reason))
             if included:
                 included_tables.append(table)
@@ -224,7 +239,8 @@ def build_canonical(
     # A pure-text upload (a PDF/docx BCTC with no table structure at all —
     # e.g. the existing tests' PDF fixtures) has nothing to scan and must
     # pass through unfiltered; only a document whose OWN tables were all
-    # classified as non-BCTC (a real bank-statement-only upload) is dropped.
+    # classified as non-BCTC (a real bank-statement-only xlsx upload) is
+    # dropped.
     filtered_documents = []
     for doc, tables in included_tables_by_doc:
         if not doc.tables:

@@ -146,8 +146,20 @@ def find_all_matches_by_period(
             primary_year = detect_table_primary_year(table)
             if primary_year is None:
                 primary_year = doc_primary_year
+            # The header isn't always row 0 — a real xlsx export often has a
+            # title row ("BAO CAO TAI CHINH TOM TAT...") above the actual
+            # "Chi tieu | So cuoi nam | So dau nam" header. Scan forward for
+            # the first row that actually carries a year signal before
+            # falling back to row 0's (possibly empty) mapping.
+            header_idx = 0
             year_columns = detect_year_columns(table.rows[0], primary_year)
-            for row_idx, row in enumerate(table.rows[1:], start=1):
+            if not year_columns:
+                for idx, row in enumerate(table.rows):
+                    candidate = detect_year_columns(row, primary_year)
+                    if candidate:
+                        header_idx, year_columns = idx, candidate
+                        break
+            for row_idx, row in enumerate(table.rows[header_idx + 1:], start=header_idx + 1):
                 joined = " | ".join(row)
                 haystack = _strip_accents_lower(joined).replace("|", " ")
                 if not pattern.search(haystack):

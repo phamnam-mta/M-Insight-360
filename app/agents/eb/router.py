@@ -27,8 +27,9 @@ from .contract_financing import compute_output_contract_financing_ratio, compute
 from .document_check import MANDATORY_DOC_TYPES, classify_documents, missing_from_classified
 from .document_status import build_document_status_list
 from .dsp_reconciliation import evaluate_rf04_dsp_mismatch
+from .canonical import build_canonical
 from .export_gate import evaluate_export_gate
-from .financial_inputs import EbFinancialInputs, extract_period_aware_financial_inputs, select_richest_period
+from .financial_inputs import EbFinancialInputs, financial_inputs_by_period, select_richest_period
 from .leverage import (
     compute_short_term_debt_ratio,
     evaluate_rf03_short_term_debt_ratio,
@@ -80,6 +81,7 @@ async def assess(
     eligible_contract_value_vnd: float | None = Form(default=None),
     qd_eb_039_method: str | None = Form(default=None),
     report_period: str | None = Form(default=None),
+    sheets: str | None = Form(default=None),
 ) -> dict:
     request_start = time.monotonic()
     assessed_at = datetime.datetime.now(datetime.UTC).isoformat()
@@ -118,7 +120,8 @@ async def assess(
         classified = classify_documents(documents)
         missing = missing_from_classified(classified)
 
-        period_extractions = extract_period_aware_financial_inputs(documents)
+        canonical_result = build_canonical(documents, include_all_sheets=(sheets == "all"))
+        period_extractions = financial_inputs_by_period(canonical_result)
         available_periods = sorted(period_extractions.keys(), reverse=True)
         # Auto-selection (no explicit report_period requested) picks the
         # most POPULATED period, not just the newest year number — an
@@ -201,7 +204,8 @@ async def assess(
             )
         activated_flags = [f for f in risk_flags if f.status == "KÍCH HOẠT"]
 
-        overview_rows, overview_summary = evaluate_overview(documents)
+        canonical_fields_for_period = canonical_result.fields_by_year.get(selected_period or "", {})
+        overview_rows, overview_summary = evaluate_overview(documents, canonical_fields_for_period)
         metrics_by_name = {
             "nwc": nwc, "current_ratio": current_ratio,
             "short_term_debt_ratio": short_term_debt_ratio, "dscr": dscr, "icr": icr,
@@ -212,6 +216,24 @@ async def assess(
             "receivables_financing_limit_85": receivables_financing_limit_85,
         }
 
+        # S7.2(f): a same-year field read differently by two BCTC-included
+        # sheets (canonical.consistency) or a balance sheet that itself
+        # doesn't balance (sanity_result.balance_mismatch) are both document
+        # defects, folded into one combined signal so neither can silently
+        # slip past the other's hard block.
+        combined_khop = canonical_result.consistency.khop and not sanity_result.balance_mismatch
+        combined_lech = list(canonical_result.consistency.danh_sach_lech)
+        if sanity_result.balance_mismatch:
+            combined_lech.append({"chi_tieu": "Cân đối kế toán", "chi_tiet": sanity_result.balance_mismatch_detail})
+
+        # Review Focus #5: an upload whose sheets were all scanned but NONE
+        # classified as a BCTC source (e.g. a bank-statement-only "sao kê")
+        # must hard-block exactly like an unreadable file — it is not the
+        # same as "extracted successfully, all fields legitimately missing."
+        no_bctc_sheet_included = bool(canonical_result.sheet_scan) and not any(
+            s.included for s in canonical_result.sheet_scan
+        )
+
         gate_result = evaluate_export_gate(
             risk_flags, equity_vnd=clean_inputs.equity_vnd, dscr=dscr, icr=icr,
             # Bước 0 hard-blocks (S7.2 a): unreadable upload, or the
@@ -221,8 +243,10 @@ async def assess(
                 (bool(extraction_warnings) and not any(
                     v is not None for v in asdict(financial_inputs).values()
                 ))
-                or sanity_result.balance_mismatch
+                or not combined_khop
+                or no_bctc_sheet_included
             ),
+            loai_chan="LECH_DU_LIEU" if not combined_khop else None,
             # TODO(personal-vs-legal-entity detection): this codebase has no
             # BCTC classifier for personal/household filings yet (out of
             # scope per the v2.3 rebuild spec's extraction-layer boundary);
@@ -266,6 +290,20 @@ async def assess(
                 "suspect_fields": sanity_result.suspect_fields,
                 "balance_mismatch": sanity_result.balance_mismatch,
                 "balance_mismatch_detail": sanity_result.balance_mismatch_detail,
+            },
+            "sheet_scan": [asdict(s) for s in canonical_result.sheet_scan],
+            "cot_nam": {
+                "nguon_nam_bao_cao": "cot_nam_sheet_bctc" if selected_period else None,
+                "cac_nam_co_trong_ho_so": available_periods,
+                "nam_can_nguoi_dung_xac_nhan": len(available_periods) > 1 and not report_period,
+            },
+            "consistency": {"khop": combined_khop, "danh_sach_lech": combined_lech},
+            "canonical": {
+                ma: {
+                    "nhan": cf.nhan, "gia_tri": cf.gia_tri, "don_vi": cf.don_vi, "nam": cf.nam,
+                    "nguon": cf.nguon, "sheet": cf.sheet, "loai": cf.loai, "co_gia_tri": cf.co_gia_tri,
+                }
+                for ma, cf in canonical_fields_for_period.items()
             },
             # Raw extracted BCTC field values, independent of which metrics
             # happen to cite them in their own input_values — the frontend's
