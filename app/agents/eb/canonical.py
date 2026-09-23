@@ -8,8 +8,10 @@ import re
 import unicodedata
 from dataclasses import dataclass, field
 
+from app.engine.core.numbers import parse_vn_number
 from app.engine.core.types import EvidenceRef
-from app.extraction.types import ExtractedTable
+from app.extraction.evidence_search import find_all_matches_by_period
+from app.extraction.types import ExtractedDocument, ExtractedTable
 
 # Moved here from financial_inputs.py (was duplicated independently by every
 # overview/*.py BCTC-numeric condition before this refactor — H4).
@@ -119,6 +121,31 @@ def _strip_accents_lower(text: str) -> str:
     return "".join(c for c in normalized if not unicodedata.combining(c)).lower()
 
 
+_LABELS_VN: dict[str, str] = {
+    "IS_REVENUE": "Doanh thu thuần",
+    "IS_COGS": "Giá vốn hàng bán",
+    "IS_GROSS_PROFIT": "Lợi nhuận gộp",
+    "IS_PBT": "Lợi nhuận trước thuế",
+    "IS_PAT": "Lợi nhuận sau thuế",
+    "IS_INTEREST": "Chi phí lãi vay",
+    "IS_DEPRECIATION": "Khấu hao",
+    "BS_CURRENT_ASSETS": "Tài sản ngắn hạn",
+    "BS_CURRENT_LIABILITIES": "Nợ ngắn hạn",
+    "BS_NON_CURRENT_ASSETS": "Tài sản dài hạn",
+    "BS_EQUITY": "Vốn chủ sở hữu",
+    "BS_CHARTER_CAPITAL": "Vốn điều lệ",
+    "BS_LT_BORROWINGS": "Vay & nợ thuê TC dài hạn",
+    "BS_ST_BORROWINGS": "Vay & nợ thuê TC ngắn hạn",
+    "BS_TOTAL_LIABILITIES": "Tổng nợ phải trả",
+    "BS_AR_CUSTOMER": "Phải thu khách hàng",
+    "BS_INVENTORY": "Hàng tồn kho",
+    "BS_AP_SUPPLIER": "Phải trả người bán",
+    "BS_CASH": "Tiền và tương đương tiền",
+    "DEBT_PRINCIPAL_DUE": "Nợ gốc đến hạn",
+    "CFO": "Lưu chuyển tiền thuần từ HĐKD",
+}
+
+
 def classify_sheet(table: ExtractedTable) -> tuple[bool, str]:
     """(included, reason). A sheet is included as a BCTC source if its own
     name matches a known BCTC naming pattern, OR its own content clears a
@@ -135,3 +162,97 @@ def classify_sheet(table: ExtractedTable) -> tuple[bool, str]:
         return True, f"Nội dung khớp {hits} chỉ tiêu BCTC chuẩn"
 
     return False, "Không khớp tên sheet BCTC và nội dung không đạt ngưỡng chỉ tiêu tài chính"
+
+
+def _filtered_document(doc: ExtractedDocument, included_tables: list[ExtractedTable]) -> ExtractedDocument:
+    """A copy of doc carrying only its BCTC-included sheets/tables — so
+    find_all_matches_by_period never sees a bundled sao-kê/notes sheet."""
+    text = "\n".join(" | ".join(row) for table in included_tables for row in table.rows)
+    return ExtractedDocument(
+        filename=doc.filename,
+        doc_type=doc.doc_type,
+        text=text,
+        tables=included_tables,
+        extraction_method=doc.extraction_method,
+        confidence=doc.confidence,
+        warnings=doc.warnings,
+        file_id=getattr(doc, "file_id", ""),
+        pages=getattr(doc, "pages", None),
+    )
+
+
+def build_canonical(
+    documents: list[ExtractedDocument], *, include_all_sheets: bool = False
+) -> CanonicalResult:
+    """Bước 0C: scan every sheet in every document, classify each one as a
+    BCTC source or not, then extract every field exactly once from only the
+    included sheets. This is the only place a BCTC-field regex is run —
+    financial_inputs.py and the overview condition evaluators read the
+    CanonicalField values this produces, never re-search raw documents."""
+    sheet_scan: list[SheetScanResult] = []
+    included_tables_by_doc: list[tuple[ExtractedDocument, list[ExtractedTable]]] = []
+
+    for doc in documents:
+        included_tables: list[ExtractedTable] = []
+        for table in doc.tables:
+            included, reason = classify_sheet(table)
+            if include_all_sheets:
+                included, reason = True, "sheets=all — quét toàn bộ theo yêu cầu người dùng"
+            sheet_scan.append(SheetScanResult(sheet=table.sheet_or_page, included=included, reason=reason))
+            if included:
+                included_tables.append(table)
+        included_tables_by_doc.append((doc, included_tables))
+
+    filtered_documents = [
+        _filtered_document(doc, tables) for doc, tables in included_tables_by_doc if tables
+    ]
+
+    fields_by_year: dict[str, dict[str, CanonicalField]] = {}
+    conflicts: list[dict] = []
+
+    for ma, pattern in _FIELD_PATTERNS.items():
+        matches = find_all_matches_by_period(filtered_documents, pattern)
+        by_year_raw: dict[str, list[tuple]] = {}
+        for ref, raw, year, confidence in matches:
+            by_year_raw.setdefault(year, []).append((ref, raw, confidence))
+
+        for year, refs_and_raw in by_year_raw.items():
+            distinct_values = {round(parse_vn_number(raw), 6) for _, raw, _ in refs_and_raw}
+            refs = [ref for ref, _, _ in refs_and_raw]
+            year_fields = fields_by_year.setdefault(year, {})
+            if len(distinct_values) > 1:
+                conflicts.append({
+                    "chi_tieu": _LABELS_VN.get(ma, ma),
+                    "gia_tri": sorted(distinct_values),
+                    "nam": year,
+                })
+                year_fields[ma] = CanonicalField(
+                    ma=ma,
+                    nhan=_LABELS_VN.get(ma, ma),
+                    gia_tri=None,
+                    don_vi="VND",
+                    nam=year,
+                    nguon=None,
+                    sheet=None,
+                    loai="chua_co",
+                    co_gia_tri=False,
+                    evidence=refs,
+                )
+            else:
+                value = parse_vn_number(refs_and_raw[0][1])
+                sheet = refs[0].location.split("'")[1] if "'" in refs[0].location else None
+                year_fields[ma] = CanonicalField(
+                    ma=ma,
+                    nhan=_LABELS_VN.get(ma, ma),
+                    gia_tri=value,
+                    don_vi="VND",
+                    nam=year,
+                    nguon=refs[0].original_text,
+                    sheet=sheet,
+                    loai="trich_xuat" if refs_and_raw[0][2] == "explicit" else "uoc_tinh",
+                    co_gia_tri=True,
+                    evidence=refs,
+                )
+
+    consistency = ConsistencyResult(khop=len(conflicts) == 0, danh_sach_lech=conflicts)
+    return CanonicalResult(fields_by_year=fields_by_year, sheet_scan=sheet_scan, consistency=consistency)

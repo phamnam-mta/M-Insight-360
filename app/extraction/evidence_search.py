@@ -14,6 +14,18 @@ def _strip_accents_lower(text: str) -> str:
     return ascii_text.lower()
 
 
+def _last_numeric_cell(row: list[str]) -> str | None:
+    """The rightmost cell in a row that is purely a number. Real BCTC rows
+    put the actual figure last, with leading STT/Ma-so columns holding small
+    numbers that a bare regex capture would grab instead (T31: a row like
+    ["10", "Doanh thu thuan", "10", "90105893754"] must never yield 10)."""
+    for cell in reversed(row):
+        stripped = cell.strip()
+        if stripped and re.fullmatch(r"-?[\d.,]+", stripped):
+            return stripped
+    return None
+
+
 def _extract_value(original: str, stripped_match: re.Match) -> str:
     # NFKD-decompose-and-strip is character-count-preserving for standard
     # Vietnamese text (every character maps to exactly one base character,
@@ -158,8 +170,13 @@ def find_all_matches_by_period(
                 else:
                     # No year signal in this table's header at all — keep the
                     # first captured value as a single best-effort guess
-                    # rather than silently discarding a real match.
+                    # rather than silently discarding a real match. Prefer
+                    # the row's rightmost purely-numeric cell over the
+                    # regex's own capture group — a leading STT/Ma-so column
+                    # would otherwise be captured instead of the real figure
+                    # (T31).
                     match = pattern.search(haystack)
+                    value = _last_numeric_cell(row) or _extract_value(joined, match)
                     year = str(primary_year) if primary_year else "khong_xac_dinh"
                     results.append((
                         EvidenceRef(
@@ -167,7 +184,7 @@ def find_all_matches_by_period(
                             location=f"Sheet '{table.sheet_or_page}', dòng {row_idx + 1}",
                             original_text=joined, period=year,
                         ),
-                        _extract_value(joined, match), year, "suy_doan",
+                        value, year, "suy_doan",
                     ))
 
         if not matched_in_tables and doc.text:
