@@ -37,6 +37,17 @@ _FIELD_PATTERNS: dict[str, re.Pattern] = {
     "BS_CASH": re.compile(r"tien va tuong duong tien[:\s]*(-?[\d.,]+)"),
     "DEBT_PRINCIPAL_DUE": re.compile(r"no goc den han[:\s]*(-?[\d.,]+)"),
     "CFO": re.compile(r"luu chuyen tien thuan tu hoat dong kinh doanh[:\s]*(-?[\d.,]+)"),
+    # Internal fields (no H4 instruction code): ported verbatim from the old
+    # financial_inputs.py._FIELD_PATTERNS so repayment_capacity.py,
+    # profitability.py, stress_test.py, dsp_reconciliation.py and
+    # capital_structure.py keep receiving real values through
+    # financial_inputs_by_period instead of silently going to None.
+    "_REVENUE_BCTC": re.compile(r"doanh thu thuan[:\s]*(-?[\d.,]+)"),
+    "_REVENUE_DSP": re.compile(r"doanh thu (?:digisale|dsp)[:\s]*(-?[\d.,]+)"),
+    "_INTEREST_DUE": re.compile(r"lai den han[:\s]*(-?[\d.,]+)"),
+    "_EBIT": re.compile(r"ebit\)?[:\s]*(-?[\d.,]+)"),
+    "_FINANCE_LEASE_DEBT": re.compile(r"no thue tai chinh[:\s]*(-?[\d.,]+)"),
+    "_TOTAL_PRINCIPAL_DUE": re.compile(r"no goc den han[:\s]*(-?[\d.,]+)"),
 }
 
 # ma -> EbFinancialInputs attribute name (or None when the field has no
@@ -65,6 +76,12 @@ FIELD_CODE_MAP: dict[str, str | None] = {
     "BS_CASH": "cash_vnd",
     "DEBT_PRINCIPAL_DUE": "principal_due_vnd",
     "CFO": "cfo_vnd",
+    "_REVENUE_BCTC": "revenue_bctc_vnd",
+    "_REVENUE_DSP": "revenue_dsp_vnd",
+    "_INTEREST_DUE": "interest_due_vnd",
+    "_EBIT": "ebit_vnd",
+    "_FINANCE_LEASE_DEBT": "finance_lease_debt_vnd",
+    "_TOTAL_PRINCIPAL_DUE": "total_principal_due_vnd",
 }
 
 LEGACY_ALIAS: dict[str, str] = {
@@ -203,9 +220,17 @@ def build_canonical(
                 included_tables.append(table)
         included_tables_by_doc.append((doc, included_tables))
 
-    filtered_documents = [
-        _filtered_document(doc, tables) for doc, tables in included_tables_by_doc if tables
-    ]
+    # classify_sheet only has sheets to classify when a document HAS tables.
+    # A pure-text upload (a PDF/docx BCTC with no table structure at all —
+    # e.g. the existing tests' PDF fixtures) has nothing to scan and must
+    # pass through unfiltered; only a document whose OWN tables were all
+    # classified as non-BCTC (a real bank-statement-only upload) is dropped.
+    filtered_documents = []
+    for doc, tables in included_tables_by_doc:
+        if not doc.tables:
+            filtered_documents.append(doc)
+        elif tables:
+            filtered_documents.append(_filtered_document(doc, tables))
 
     fields_by_year: dict[str, dict[str, CanonicalField]] = {}
     conflicts: list[dict] = []
