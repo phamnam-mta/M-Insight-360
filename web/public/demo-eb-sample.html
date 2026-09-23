@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="vi"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>M-Insight 360 · Thẩm định KHTD — CÔNG TY CỔ PHẦN ĐẦU TƯ ALPHA GROUP</title>
+<style>
+:root{--navy:#12284c;--orange:#ef4123;--orange-l:#ff6b3d;--ink:#1a2434;--mute:#6b7a90;
+--line:#e3e8ef;--bg:#eef2f7;--card:#fff;--ok:#17976b;--warn:#c8892a;--bad:#e0362c;--gray:#8b97a8}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font:15px/1.55 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink)}
+header{background:linear-gradient(135deg,#12284c,#1d3f72);color:#fff;padding:18px 0 26px}
+.hd{max-width:1340px;margin:0 auto;padding:0 20px;display:flex;align-items:flex-start;gap:20px;flex-wrap:wrap}
+.logo{font-weight:800;font-size:21px;letter-spacing:-.5px}.logo span{color:var(--orange-l)}
+.khname{font-size:20px;font-weight:700;margin-top:8px}
+.khmeta{font-size:12.5px;color:#a9c0e0;margin-top:3px}
+.badges{margin-left:auto;display:flex;gap:7px;flex-wrap:wrap;align-items:center}
+.bdg{font-size:11.5px;font-weight:700;padding:5px 10px;border-radius:20px;border:1px solid transparent;white-space:nowrap}
+.bdg-ok{background:rgba(60,210,150,.14);color:#6fe0b0;border-color:rgba(60,210,150,.4)}
+.bdg-warn{background:rgba(255,196,80,.16);color:#ffcf70;border-color:rgba(255,196,80,.45)}
+.bdg-bad{background:rgba(224,54,44,.2);color:#ff9d96;border-color:rgba(224,54,44,.5)}
+.bdg-info{background:rgba(255,255,255,.1);color:#cfe0f5;border-color:rgba(255,255,255,.22)}
+.bdg-demo{background:rgba(255,107,61,.18);color:#ffb499;border-color:rgba(255,107,61,.5)}
+.wrap{max-width:1340px;margin:-14px auto 50px;padding:0 20px}
+.banner{background:#fff;border-left:5px solid var(--warn);border-radius:10px;padding:14px 18px;
+box-shadow:0 6px 22px rgba(18,40,76,.12);margin-bottom:16px;font-size:14px}
+.banner.ok{border-left-color:var(--ok)}.banner.bad{border-left-color:var(--bad)}
+.grid{display:grid;grid-template-columns:290px minmax(0,1fr) 330px;gap:16px;align-items:start}
+@media(max-width:1150px){.grid{grid-template-columns:1fr}.col-left{order:3}.col-mid{order:1}.col-right{order:2}}
+.card{background:var(--card);border-radius:12px;padding:16px 18px;box-shadow:0 4px 18px rgba(18,40,76,.08);margin-bottom:14px}
+.card h3{font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--mute);margin-bottom:10px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:14px}
+.kpi{background:#fff;border-radius:12px;padding:14px 16px;box-shadow:0 4px 18px rgba(18,40,76,.08);border-top:4px solid var(--gray)}
+.kpi.ok{border-top-color:var(--ok)}.kpi.warn{border-top-color:var(--warn)}.kpi.bad{border-top-color:var(--bad)}
+.kpi .lb{font-size:11.5px;color:var(--mute);text-transform:uppercase;letter-spacing:.5px;font-weight:700}
+.kpi .vl{font-size:23px;font-weight:800;letter-spacing:-.6px;margin-top:4px;line-height:1.15}
+.kpi .nx{font-size:12.5px;color:var(--mute);margin-top:5px}
+.kpi .src{font-size:11px;color:#9aa6b6;margin-top:6px;border-top:1px dashed var(--line);padding-top:5px}
+.kpi.unk{background:#f6f8fb;border-top-color:#cfd7e2}
+.kpi.unk .vl{font-size:16px;color:var(--gray);font-weight:700}
+.scale{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.scale .side{flex:1;min-width:200px;background:#f6f8fb;border-radius:10px;padding:11px 13px}
+.scale .side .t{font-size:11.5px;color:var(--mute);text-transform:uppercase;font-weight:700}
+.scale .side .n{font-size:17px;font-weight:800;margin-top:3px}
+.scale .eq{font-size:22px;color:var(--mute)}
+.pill{display:inline-block;font-size:11.5px;font-weight:700;padding:3px 9px;border-radius:12px}
+.p-ok{background:#e4f6ef;color:var(--ok)}.p-warn{background:#fdf1de;color:var(--warn)}
+.p-bad{background:#fdeae9;color:var(--bad)}.p-gray{background:#eef1f5;color:var(--gray)}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:11.5px;text-transform:uppercase;color:var(--mute);letter-spacing:.4px}
+.flag{margin-bottom:11px}
+.flagA{border-left:3px solid var(--bad);padding-left:9px}
+.flagB{border-left:3px dashed var(--gray);padding-left:9px}
+.flag .h{font-weight:700;font-size:13.5px}
+.flag .r{font-size:13px;color:#42506a;margin-top:2px}
+.flag .a{font-size:12.5px;color:var(--mute);margin-top:3px}
+.gate{background:#fff8ec;border:1px solid #f0d9ae;border-radius:10px;padding:12px 14px;font-size:13.5px}
+.kv{display:flex;justify-content:space-between;gap:10px;font-size:13.5px;padding:6px 0 2px}
+.kv .k{color:var(--mute)}.kv .v{font-weight:700;text-align:right}
+.kv .v.unkv{font-weight:600;color:var(--gray);font-size:12px}
+.trace{font-size:10.5px;color:#9aa6b6;border-bottom:1px dashed var(--line);padding-bottom:6px;margin-bottom:2px;text-align:right}
+.tag{font-size:9.5px;font-weight:700;padding:1px 5px;border-radius:8px;vertical-align:middle}
+.tag-proxy{background:#fdeae9;color:var(--bad)}.tag-fb{background:#fdf1de;color:var(--warn)}
+.note{font-size:12.5px;color:var(--mute);margin-top:8px;line-height:1.5}
+.foot{max-width:1340px;margin:0 auto;padding:18px 20px 40px;font-size:12.5px;color:var(--mute)}
+code{background:#eef1f5;padding:1px 5px;border-radius:4px;font-size:12px}
+</style></head><body>
+<header><div class="hd">
+<div><div class="logo">MSB · M-Insight<span> 360</span></div>
+<div class="khname">CÔNG TY CỔ PHẦN ĐẦU TƯ ALPHA GROUP</div>
+<div class="khmeta">Kỳ báo cáo 2025 · BCTC Chưa xác định từ hồ sơ tải lên · HO_SO_ALPHA_GROUP_DEMO_SO_DU_MO_PHONG-bcd54f38.xlsx · AI đã trích xuất</div></div>
+<div class="badges"><span class="bdg bdg-demo">DEMO — hồ sơ ẩn danh, không phải khách hàng thật</span>
+<span class="bdg bdg-ok">Tiền kiểm hồ sơ: PASS</span>
+<span class="bdg bdg-info">Độ phủ dữ liệu 90.0% — Confidence tối đa H</span>
+<span class="bdg bdg-info">Đơn vị: VND</span></div></div></header>
+
+<div class="wrap">
+<div class="banner ok"><b>Đủ điều kiện đưa kết luận sơ bộ.</b> Hồ sơ khách hàng cung cấp đọc được 9/10 trường bắt buộc (90.0%). Chưa đọc được: <b>Khấu hao</b>. Các chỉ tiêu phụ thuộc hiển thị ở trạng thái chưa đủ dữ liệu, không bị ẩn. MSB phát hiện sớm giúp anh/chị, tránh mất công làm tờ trình rồi bị trả hồ sơ.</div>
+<div class="grid">
+
+<div class="col-left">
+<div class="card"><h3>Hồ sơ</h3><div class="kv"><span class="k">Tên hồ sơ</span><span class="v">CÔNG TY CỔ PHẦN ĐẦU TƯ ALPHA GROUP</span></div><div class="kv"><span class="k">Kỳ báo cáo</span><span class="v">2025</span></div><div class="kv"><span class="k">Loại BCTC</span><span class="v">Chưa xác định từ hồ sơ tải lên</span></div><div class="kv"><span class="k">Tệp nguồn</span><span class="v">HO_SO_ALPHA_GROUP_DEMO_SO_DU_MO_PHONG-bcd54f38.xlsx</span></div><div class="kv"><span class="k">Sheet đã dùng</span><span class="v">10_BCTC_TOM_TAT</span></div><div class="kv"><span class="k">Trạng thái</span><span class="v">AI đã trích xuất</span></div><div class="kv"><span class="k">Độ phủ dữ liệu</span><span class="v">90.0% (9/10 trường bắt buộc)</span></div><div class="kv"><span class="k">Confidence tối đa</span><span class="v">H</span></div>
+<div class="note">Dữ liệu read-only sau khi AI trích xuất. Sửa có kiểm soát, lưu vết người sửa và thời gian.</div></div>
+<div class="card"><h3>Tiền kiểm hồ sơ — Bước 0</h3><table>
+<tr><th>Kiểm tra</th><th>KQ</th><th>Ghi chú</th></tr><tr><td>File đọc được</td><td><span class="pill p-ok">PASS</span></td><td>Đọc 59 dòng từ file .xlsx</td></tr><tr><td>Là BCTC pháp nhân</td><td><span class="pill p-ok">PASS</span></td><td>Nhận diện được cấu trúc BCTC pháp nhân</td></tr><tr><td>Có đủ 3 báo cáo CĐKT/KQKD/LCTT</td><td><span class="pill p-ok">PASS</span></td><td>Đầy đủ</td></tr><tr><td>Cân đối kế toán: Tổng TS = Tổng NV</td><td><span class="pill p-ok">PASS</span></td><td>Cân đối khớp</td></tr><tr><td>Kỳ báo cáo xác định được</td><td><span class="pill p-ok">PASS</span></td><td>Kỳ: 2025</td></tr></table></div>
+<div class="card"><h3>Dữ liệu đã trích xuất · truy vết</h3><div class="kv"><span class="k">Tài sản ngắn hạn</span><span class="v">293.369.838.619</span></div><div class="trace">Nhan: A. TAI SAN NGAN HAN</div><div class="kv"><span class="k">Nợ ngắn hạn</span><span class="v">165.307.940.854</span></div><div class="trace">Nhan: I. No ngan han</div><div class="kv"><span class="k">Tài sản dài hạn</span><span class="v">576.704.461.430</span></div><div class="trace">Nhan: B. TAI SAN DAI HAN</div><div class="kv"><span class="k">Tổng tài sản</span><span class="v">870.074.300.049</span></div><div class="trace">Nhan: TONG CONG TAI SAN</div><div class="kv"><span class="k">Nợ phải trả</span><span class="v">289.109.192.531</span></div><div class="trace">Nhan: C - NO PHAI TRA</div><div class="kv"><span class="k">Vốn chủ sở hữu</span><span class="v">580.965.107.518</span></div><div class="trace">Nhan: D - VON CHU SO HUU</div><div class="kv"><span class="k">Vốn điều lệ</span><span class="v">580.000.000.000</span></div><div class="trace">Nhan: 1. Von gop cua chu so huu</div><div class="kv"><span class="k">Phải thu khách hàng</span><span class="v">1.030.523.666</span></div><div class="trace">Nhan: 1. Phai thu ngan han cua khach hang (131)</div><div class="kv"><span class="k">Hàng tồn kho</span><span class="v">13.676.836.829</span></div><div class="trace">Nhan: IV. Hang ton kho</div><div class="kv"><span class="k">Phải trả người bán</span><span class="v">1.440.085.191</span></div><div class="trace">Nhan: 1. Phai tra nguoi ban ngan han (331 Co)</div><div class="kv"><span class="k">Tiền và tương đương tiền</span><span class="v">624.458.391</span></div><div class="trace">Nhan: I. Tien va cac khoan tuong duong tien</div><div class="kv"><span class="k">Vay ngắn hạn</span><span class="v">78.810.636.239</span></div><div class="trace">Nhan: 10. Vay va no thue tai chinh ngan han</div><div class="kv"><span class="k">Vay dài hạn</span><span class="v unkv">Chưa xác định từ hồ sơ tải lên</span></div><div class="trace">chưa đọc được từ hồ sơ</div><div class="kv"><span class="k">Nợ dài hạn</span><span class="v">123.801.251.677</span></div><div class="trace">Nhan: II. No dai han</div><div class="kv"><span class="k">Doanh thu thuần</span><span class="v">90.105.893.754</span></div><div class="trace">Nhan: 1. Doanh thu ban hang va cung cap dich vu</div><div class="kv"><span class="k">Giá vốn hàng bán</span><span class="v">73.340.931.618</span></div><div class="trace">Nhan: 4. Gia von hang ban</div><div class="kv"><span class="k">Lợi nhuận trước thuế</span><span class="v">29.084.707</span></div><div class="trace">Nhan: 14. Tong loi nhuan ke toan truoc thue</div><div class="kv"><span class="k">Lợi nhuận sau thuế</span><span class="v">23.267.766</span></div><div class="trace">Nhan: 17. Loi nhuan sau thue TNDN</div><div class="kv"><span class="k">Chi phí lãi vay <span class="tag tag-fb">fallback</span></span><span class="v">12.131.595.580</span></div><div class="trace">Fallback: Chi phí tài chính (KQKD mã 22)</div><div class="kv"><span class="k">Khấu hao</span><span class="v unkv">Chưa xác định từ hồ sơ tải lên</span></div><div class="trace">chưa đọc được từ hồ sơ</div><div class="kv"><span class="k">Nợ gốc đến hạn 12 tháng <span class="tag tag-proxy">ước tính</span></span><span class="v">159.634.671.186</span></div><div class="trace">Proxy (ƯỚC TÍNH): LCTT &#x27;Tiền trả nợ gốc vay&#x27; cả năm — KHÔNG phải nợ gốc đến hạn 12 tháng. Đề nghị RM lấy lịch trả nợ chi tiết.</div></div>
+</div>
+
+<div class="col-mid">
+<div class="kpis"><div class="kpi ok"><div class="lb">Vốn lưu động ròng</div><div class="vl">128,1 tỷ</div>
+<div class="nx">Doanh nghiệp có phần đệm vốn lưu động dương.</div><div class="src">Tài sản ngắn hạn − Nợ ngắn hạn</div></div><div class="kpi ok"><div class="lb">Cân đối thanh khoản</div><div class="vl">1,4212</div>
+<div class="nx">Dòng vốn lưu động tạo vùng đệm so với quy mô doanh thu.</div><div class="src">Vốn lưu động ròng / Doanh thu thuần</div></div><div class="kpi unk"><div class="lb">DSCR</div>
+<div class="vl">Chưa đủ dữ liệu</div><div class="nx">unknown — thiếu dữ liệu đầu vào</div>
+<div class="src">Cảnh báo dữ liệu (nhóm B) — không phải tín hiệu tín dụng</div></div><div class="kpi bad"><div class="lb">ICR</div><div class="vl">1,00x</div>
+<div class="nx">Lợi nhuận vận hành chưa tạo vùng đệm đủ an toàn cho chi phí lãi vay.</div><div class="src">EBIT / Chi phí lãi vay · Fallback: Chi phí tài chính (KQKD mã 22)</div></div></div>
+<div class="card"><h3>Cân bằng hai vế · kỳ hạn nguồn vốn</h3><div class="scale">
+<div class="side"><div class="t">Vế trái — Vốn lưu động ròng</div><div class="n">128.061.897.765</div></div>
+<div class="eq">=</div>
+<div class="side"><div class="t">Vế phải — Nguồn vốn dài hạn ròng</div><div class="n">128.061.897.765</div></div></div>
+<div style="margin-top:10px">Chênh lệch: <b>0</b> &nbsp;<span class="pill p-ok">Cân bằng</span></div>
+<div class="note">Tài sản dài hạn nên được tài trợ bằng nguồn vốn dài hạn; mất cân đối là tín hiệu rủi ro kỳ hạn.</div></div>
+<div class="card"><h3>Cảnh báo rủi ro</h3><div class="flag flagA"><div class="h">⛔ ICR · <span class="pill p-bad">Cao</span></div>
+<div class="r">ICR 1,00x dưới 1,5x — lợi nhuận vận hành chưa tạo vùng đệm đủ an toàn cho chi phí lãi vay.</div><div class="a">Hành động RM: Rà soát cơ cấu chi phí lãi vay và biên lợi nhuận.</div></div><div class="flag flagA"><div class="h">⛔ Chi phí lãi vay · <span class="pill p-bad">Trung bình</span></div>
+<div class="r">Chi phí lãi vay chiếm 99,8% EBIT.</div><div class="a">Hành động RM: Đánh giá khả năng chịu đựng khi lãi suất tăng.</div></div><div class="flag flagB"><div class="h">◻︎ DSCR</div><div class="r">Thiếu chỉ tiêu đầu vào để tính DSCR.</div>
+<div class="a">Hành động RM: Bổ sung trường còn thiếu hoặc nhập tay.</div></div>
+<div class="note">Hai nhóm dùng icon khác nhau: ⛔ tín hiệu tín dụng (tính vào cổng chặn tờ trình)
+· ◻︎ cảnh báo dữ liệu (không tính vào cổng chặn).</div></div>
+<div class="card"><h3>Tài trợ chuỗi — QĐ.EB.039 (chỉ tiêu thẩm định)</h3><table>
+<tr><th>Chỉ tiêu</th><th>Giá trị</th></tr>
+<tr><td>Số dư phải thu khách hàng cuối kỳ</td><td><b>1.030.523.666</b></td></tr>
+<tr><td>Doanh số phải thu phát sinh trong kỳ</td><td><span class="pill p-gray">Chưa có sổ chi tiết</span></td></tr>
+<tr><td>Tỷ lệ ứng trước áp dụng</td><td>80% — Giá trị tham chiếu từ BCTC</td></tr>
+<tr><td>Hạn mức tham chiếu</td><td><b>824.418.933</b></td></tr></table>
+<div class="note">Hạn mức tính trên số dư phải thu cuối kỳ. Nếu doanh số phải thu phát sinh trong kỳ lớn hơn nhiều lần số dư cuối kỳ, đề nghị RM lấy bảng tuổi nợ để tính trên số dư bình quân.<br>Tỷ lệ 85%: Điều kiện ưu tiên — cần xác minh bên mua thuộc VNR500/FDI và phê duyệt theo quy định.<br>Số dư phải thu tương ứng hạn mức tài trợ tham chiếu theo QĐ 039, cần thẩm định bên mua và hồ sơ trước khi đề xuất; cần thẩm định điều kiện tài sản bảo đảm theo QĐ 039.</div></div>
+</div>
+
+<div class="col-right">
+<div class="card"><h3>Cổng chặn xuất tờ trình — S7</h3><div class="gate">
+<div>Verdict: <span class="pill p-warn">XUẤT KÈM CẢNH BÁO</span></div>
+<div style="margin-top:6px">Tín hiệu tín dụng: <b>2</b> (ngưỡng chặn ≥ 3) · Vốn chủ sở hữu: <b>580.965.107.518</b></div>
+<div style="margin-top:6px">Cảnh báo dữ liệu: 1 mục — <b>không tính vào verdict</b>.</div>
+<div style="margin-top:6px">File xuất: <code>TOTRINH_..._BANNHAP.docx</code> — đơn vị triệu đồng</div><div style='margin-top:6px'>Lý do: Số tín hiệu tín dụng = 2 (dưới ngưỡng chặn 3)</div></div>
+<div class="note">Bản nháp. Cán bộ có quyền ghi đè quyết định của cổng chặn kèm lý do; mọi lần ghi đè đều lưu vết.</div></div>
+<div class="card"><h3>M-Insight AI</h3>
+<div class="note">Panel luận điểm thẩm định do LLM sinh theo instruction (cần <code>LLM_API_KEY</code>).
+Bản này render từ script nên chỉ hiển thị phần tính toán xác định được, không bịa nhận định.</div></div>
+<div class="card"><h3>Việc RM cần xác nhận</h3>
+<div style="font-size:13px"><b>Trường BCTC chưa đọc được</b><ul style="margin:6px 0 10px 18px"><li>Khấu hao</li></ul>
+<b>Trường ngoài BCTC — RM tự điền (S8)</b><ul style="margin:6px 0 10px 18px">
+<li>Nợ gốc đến hạn 12 tháng (lịch trả nợ chi tiết)</li><li>Mục đích cấp tín dụng, phương án sử dụng vốn</li>
+<li>Tài sản bảo đảm</li><li>Xếp hạng tín dụng, kết quả CIC</li></ul>
+<b>Checkbox pháp lý chờ RM tích (S1.3)</b><ul style="margin:6px 0 0 18px">
+<li>Đối tượng không/hạn chế được cấp tín dụng theo pháp luật</li>
+<li>Đối tượng không/hạn chế theo quy định MSB</li><li>Đánh giá rủi ro MTXH</li></ul></div></div>
+</div>
+
+</div></div>
+<div class="foot">Khuyến nghị sơ bộ từ dữ liệu BCTC — cần phê duyệt theo quy trình tín dụng MSB.<br>
+Bán chéo / khuyến nghị sản phẩm thuộc Cross-sell Agent — ngoài phạm vi agent này.</div>
+</body></html>

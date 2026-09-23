@@ -8,6 +8,7 @@ type Props = {
   agentType: "rb" | "eb" | "crosssell";
   onSelect: (result: AssessmentResult) => void;
   refreshKey?: number;
+  onLoaded?: (items: HistoryItem[]) => void;
 };
 
 // The badge shows whether the assessment RUN itself succeeded — not the
@@ -52,10 +53,15 @@ function mergeHistoryItems(local: HistoryItem[], remote: HistoryItem[]): History
   return combined.slice(0, 5);
 }
 
-export default function HistoryPanel({ agentType, onSelect, refreshKey }: Props) {
+export default function HistoryPanel({ agentType, onSelect, refreshKey, onLoaded }: Props) {
   const [items, setItems] = useState<HistoryItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    onLoaded?.(items);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items]);
 
   useEffect(() => {
     let cancelled = false;

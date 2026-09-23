@@ -7,7 +7,7 @@ import EbResultPanel from "@/components/EbResultPanel";
 import HistoryPanel from "@/components/HistoryPanel";
 import ResultPanel from "@/components/ResultPanel";
 import CrossSellPanel from "@/components/CrossSellPanel";
-import { AssessmentResult, finishHistoryPlaceholder, runAssessment, startHistoryPlaceholder } from "@/lib/api";
+import { AssessmentResult, HistoryItem, finishHistoryPlaceholder, runAssessment, startHistoryPlaceholder } from "@/lib/api";
 
 const TAB_LABELS: Record<"rb" | "eb" | "crosssell", string> = {
   rb: "RB",
@@ -20,6 +20,10 @@ export default function Home() {
   const [result, setResult] = useState<AssessmentResult | null>(null);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
   const [lastEbFiles, setLastEbFiles] = useState<{ files: File[]; customerName: string; taxId: string } | null>(null);
+  // Starts true so the EB sample-preview block doesn't flash in before the
+  // first history fetch resolves; HistoryPanel reports the real state once
+  // it loads (for whichever tab is currently active).
+  const [historyEmpty, setHistoryEmpty] = useState(true);
 
   async function handleRerunWithPeriod(period: string) {
     if (!lastEbFiles) return;
@@ -151,7 +155,28 @@ export default function Home() {
               : undefined
           }
         />
-        <HistoryPanel agentType={tab} onSelect={setResult} refreshKey={historyRefreshKey} />
+        <HistoryPanel
+          agentType={tab}
+          onSelect={setResult}
+          refreshKey={historyRefreshKey}
+          onLoaded={(items: HistoryItem[]) => setHistoryEmpty(items.length === 0)}
+        />
+        {tab === "eb" && !result && historyEmpty && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mt-6">
+            <div className="flex items-center gap-2.5 mb-3">
+              <h2 className="text-lg font-semibold text-msb-navy">Xem trước: Bản thẩm định mẫu</h2>
+            </div>
+            <p className="text-sm text-gray-500 mb-3">
+              Chưa có hồ sơ nào được thẩm định — đây là bản mẫu minh họa màn hình kết quả (dữ liệu demo, không phải khách hàng thật).
+            </p>
+            <iframe
+              src="/demo-eb-sample.html"
+              title="Bản thẩm định mẫu"
+              className="w-full rounded-lg border border-gray-200"
+              style={{ height: 900 }}
+            />
+          </div>
+        )}
         {result && tab === "crosssell" && <CrossSellPanel result={result} />}
         {result && tab === "eb" && <EbResultPanel result={result} onRerunWithPeriod={handleRerunWithPeriod} />}
         {result && tab === "rb" && <ResultPanel result={result} />}
