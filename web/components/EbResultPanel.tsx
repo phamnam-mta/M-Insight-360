@@ -358,8 +358,8 @@ export default function EbResultPanel({
             </div>
           )}
 
-          {/* M3 — 4 thẻ KPI cố định */}
-          <div className="grid grid-cols-4 gap-3 items-start">
+          {/* M3 — 4 thẻ KPI cố định, 2 dòng x 2 cột (đủ chỗ cho số tiền dài) */}
+          <div className="grid grid-cols-2 gap-3 items-start">
             {KPI_ORDER.map(({ key, label, unit, ruleId }) => (
               <MetricCard
                 key={key}
