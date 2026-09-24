@@ -9,7 +9,11 @@ function KvRow({ k, v }: { k: string; v: React.ReactNode }) {
   return (
     <div className="flex justify-between gap-3 text-[13.5px] py-1.5 border-b border-gray-50 last:border-0">
       <span className="text-gray-500 shrink-0">{k}</span>
-      <span className="font-semibold text-right text-msb-navy break-words">{v}</span>
+      {/* flex items default to min-width: auto, same as CSS Grid items —
+          without min-w-0 here, break-words never engages and a long
+          unbroken filename overflows this card's right edge instead of
+          wrapping onto a second line. */}
+      <span className="font-semibold text-right text-msb-navy break-words min-w-0">{v}</span>
     </div>
   );
 }
