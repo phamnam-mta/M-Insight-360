@@ -91,8 +91,15 @@ function EvidenceCell({ row, caseId }: { row: ConditionRow; caseId?: string }) {
   if (row.observed.evidence.length === 0) {
     return <span className="text-xs text-gray-400">—</span>;
   }
+  // A condition matched across many rows (a sao-kê with hundreds of
+  // transactions, a field pattern that hits many lines in one sheet) can
+  // carry dozens of evidence entries. Without a height cap, one such cell
+  // stretches its whole <tr> to match — every other, normally-short cell
+  // in that same row then shows as a wall of blank space beneath its own
+  // few lines of content. A fixed max-height + scroll keeps every row's
+  // height bounded by its own content, never by one long neighbor.
   return (
-    <ul className="text-xs space-y-1">
+    <ul className="text-xs space-y-1 max-h-[110px] overflow-y-auto pr-1">
       {row.observed.evidence.map((ev, i) => (
         <li key={i}>
           {caseId ? (
