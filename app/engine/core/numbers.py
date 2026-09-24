@@ -21,6 +21,18 @@ def parse_vn_number(raw: str) -> float:
     if not cleaned:
         return 0.0
 
+    # Standard accounting notation: a negative figure is written in
+    # parentheses instead of with a minus sign — near-universal on real
+    # BCTC exports (Thông tư 200/2014/TT-BTC's own footnote spells this
+    # out: "Số liệu trong các chỉ tiêu... số âm dưới hình thức ghi trong
+    # ngoặc đơn").
+    negative = False
+    if cleaned.startswith("(") and cleaned.endswith(")"):
+        negative = True
+        cleaned = cleaned[1:-1].strip()
+        if not cleaned:
+            return 0.0
+
     has_comma = "," in cleaned
     has_dot = "." in cleaned
 
@@ -52,6 +64,7 @@ def parse_vn_number(raw: str) -> float:
             cleaned = cleaned.replace(".", "")
 
     try:
-        return float(cleaned)
+        value = float(cleaned)
     except ValueError:
         return 0.0
+    return -value if negative else value

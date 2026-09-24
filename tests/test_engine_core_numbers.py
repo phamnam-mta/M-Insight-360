@@ -39,3 +39,17 @@ def test_empty_and_unparseable_return_zero():
     assert parse_vn_number("") == 0.0
     assert parse_vn_number("   ") == 0.0
     assert parse_vn_number("n/a") == 0.0
+
+
+def test_parenthesized_negative_accounting_notation():
+    # Standard Vietnamese/international accounting convention: a negative
+    # figure is written in parentheses instead of with a minus sign — very
+    # common on real BCTC exports (e.g. "Giá trị hao mòn luỹ kế (*)"
+    # showing "(2.071.730.891)"). Previously silently parsed as 0.0.
+    assert parse_vn_number("(20)") == -20.0
+    assert parse_vn_number("(1.234.567)") == -1_234_567.0
+    assert parse_vn_number("(1,234,567.89)") == -1_234_567.89
+
+
+def test_parenthesized_with_surrounding_whitespace():
+    assert parse_vn_number(" (500.000) ") == -500_000.0
