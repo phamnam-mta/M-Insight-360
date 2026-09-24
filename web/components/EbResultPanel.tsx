@@ -148,10 +148,21 @@ function OverviewTable({ rows, caseId }: { rows: ConditionRow[]; caseId?: string
             <tr key={row.condition_id} className="border-b border-gray-100 align-top hover:bg-gray-50/60">
               <td className="py-2.5 px-2 font-medium text-msb-navy break-words">{row.condition_name}</td>
               <td className="py-2.5 px-2 break-words">{formatObservedValue(row)}</td>
-              <td className="py-2.5 px-2 text-gray-600 break-words">{row.compare_rule}</td>
+              {/* compare_rule and reason_if_incomplete are free text from the
+                  backend (see app/agents/eb/overview/*.py) and can run to a
+                  full sentence — in a narrow table-fixed column that wraps
+                  to many lines, stretching the whole <tr> the same way an
+                  unbounded evidence list did (EvidenceCell above). Capping
+                  height here keeps every row's height bounded by its own
+                  tallest column instead of one long free-text cell. */}
+              <td className="py-2.5 px-2 text-gray-600 break-words">
+                <div className="max-h-[90px] overflow-y-auto pr-1">{row.compare_rule}</div>
+              </td>
               <td className="py-2.5 px-2 break-words"><ResultBadge result={row.result} /></td>
               <td className="py-2.5 px-2 break-words"><EvidenceCell row={row} caseId={caseId} /></td>
-              <td className="py-2.5 px-2 text-gray-600 break-words">{row.reason_if_incomplete ?? "—"}</td>
+              <td className="py-2.5 px-2 text-gray-600 break-words">
+                <div className="max-h-[90px] overflow-y-auto pr-1">{row.reason_if_incomplete ?? "—"}</div>
+              </td>
             </tr>
           ))}
         </tbody>
