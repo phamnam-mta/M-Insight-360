@@ -9,6 +9,9 @@ from .types import ExtractedDocument
 
 
 def _strip_accents_lower(text: str) -> str:
+    # NFKD has no decomposition for Đ/đ — see period_columns.py's copy of
+    # this same fix for why that matters for real BCTC headers.
+    text = text.replace("Đ", "D").replace("đ", "d")
     normalized = unicodedata.normalize("NFKD", text)
     ascii_text = "".join(c for c in normalized if not unicodedata.combining(c))
     return ascii_text.lower()

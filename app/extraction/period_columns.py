@@ -18,6 +18,11 @@ _PRIOR_LABELS = ("so dau nam", "dau ky", "dau nam", "nam truoc", "ky truoc")
 
 
 def _strip_accents_lower(text: str) -> str:
+    # NFKD has no decomposition for Đ/đ (it isn't a base-letter-plus-
+    # combining-mark in Unicode) — without this, "Số đầu năm" (the
+    # standard, extremely common real BCTC prior-year header) never
+    # reduces to "so dau nam" and the prior-year column goes unrecognized.
+    text = text.replace("Đ", "D").replace("đ", "d")
     normalized = unicodedata.normalize("NFKD", text)
     return "".join(c for c in normalized if not unicodedata.combining(c)).lower()
 

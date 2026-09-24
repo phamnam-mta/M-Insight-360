@@ -71,3 +71,14 @@ def test_table_primary_year_ignores_dates_in_other_tables():
     )
     assert detect_table_primary_year(bctc_table) == 2025
     assert detect_table_primary_year(saoke_table) == 2026
+
+
+def test_detect_year_columns_recognizes_accented_dau_nam():
+    # Review finding: "Số đầu năm" (the standard, extremely common real
+    # BCTC prior-year header — confirmed verbatim in a real uploaded
+    # BCTC) was silently unrecognized because _strip_accents_lower did
+    # not decompose "Đ/đ" (NFKD has no decomposition for it), so "đầu
+    # năm" never reduced to "dau nam". The prior-year column would be
+    # silently dropped for every real accented BCTC using this header.
+    result = detect_year_columns(["Chi tiêu", "Số cuối năm", "Số đầu năm"], 2025)
+    assert result == {1: "2025", 2: "2024"}
