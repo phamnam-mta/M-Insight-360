@@ -197,3 +197,51 @@ def test_find_all_matches_by_period_unrelated_sheet_does_not_pollute_bctc_years(
     by_year = {year: raw for _, raw, year, _ in results}
     assert by_year["2025"] == "100.000.000"
     assert "2026" not in by_year
+
+
+def test_find_all_matches_by_period_unrecognized_header_still_picks_current_not_prior_column():
+    # Review finding C2: a 2-column current/prior row with a header label
+    # this codebase doesn't recognize ("Ky nay"/"Ky truoc" before the label
+    # widening) must never silently return the PRIOR-period figure.
+    table = ExtractedTable(
+        rows=[["Chi tieu", "Mot nhan khong nhan dien"], ["Tai san ngan han", "1500", "1300"]],
+        sheet_or_page="S1",
+    )
+    doc = ExtractedDocument(filename="bctc.xlsx", doc_type="xlsx", text="", tables=[table], extraction_method="spreadsheet", confidence=1.0)
+    results = find_all_matches_by_period([doc], _TSNH_PATTERN)
+    assert results[0][1] == "1500"
+
+
+def test_find_all_matches_by_period_ky_nay_ky_truoc_labels_recognized():
+    table = ExtractedTable(
+        rows=[["Chi tieu", "Ky nay", "Ky truoc"], ["Tai san ngan han", "1500", "1300"]],
+        sheet_or_page="S1",
+        )
+    doc = ExtractedDocument(
+        filename="bctc.xlsx", doc_type="xlsx", text="Bao cao 31/12/2025",
+        tables=[table], extraction_method="spreadsheet", confidence=1.0,
+    )
+    results = find_all_matches_by_period([doc], _TSNH_PATTERN)
+    by_year = {year: raw for _, raw, year, _ in results}
+    assert by_year["2025"] == "1500"
+    assert by_year["2024"] == "1300"
+
+
+def test_find_all_matches_by_period_header_scan_skips_trailing_footnote_with_year():
+    # Review finding C3: a trailing footnote row ("Bao cao lap ngay
+    # 31/12/2025") that itself contains an explicit year must never be
+    # mistaken for the real header — that would silently exclude every
+    # real data row that comes BEFORE it in the table.
+    table = ExtractedTable(
+        rows=[
+            ["Chi tieu", "Ky nay", "Ky truoc"],
+            ["Tai san ngan han", "1500", "1300"],
+            ["Bao cao lap ngay 31/12/2025"],
+        ],
+        sheet_or_page="S1",
+    )
+    doc = ExtractedDocument(filename="bctc.xlsx", doc_type="xlsx", text="", tables=[table], extraction_method="spreadsheet", confidence=1.0)
+    results = find_all_matches_by_period([doc], _TSNH_PATTERN)
+    by_year = {year: raw for _, raw, year, _ in results}
+    assert by_year["2025"] == "1500"
+    assert by_year["2024"] == "1300"

@@ -919,3 +919,23 @@ def test_export_force_cannot_bypass_lech_du_lieu_hard_block_t33():
     body = resp.json()
     assert body["block_type"] == "HARD"
     assert body.get("loai_chan") == "LECH_DU_LIEU"
+
+
+def test_export_cannot_bypass_zero_bctc_sheet_hard_block():
+    # Review finding I3: /assess hard-blocks a bank-statement-only upload
+    # (no sheet classified as BCTC), but /export never re-checked that
+    # signal — re-posting the same computed payload with force=true must
+    # still be blocked, not silently produce a docx.
+    client = TestClient(app)
+    computed = {
+        "customer_profile": {"customer_name": "ACME"},
+        "financial_inputs": {},
+        "credit_engine": {"dscr": {"value": None, "status": "NEED_MORE_DATA"}, "icr": {"value": None, "status": "NEED_MORE_DATA"}},
+        "risk_flags": [], "ho_so_period": {"selected": None},
+        "consistency": {"khop": True, "danh_sach_lech": []},
+        "sheet_scan": [{"sheet": "SAO KE", "included": False, "reason": "Không khớp mẫu BCTC"}],
+    }
+    resp = client.post("/api/eb/export", json={"computed": computed, "force": True})
+    assert resp.status_code == 409
+    body = resp.json()
+    assert body["block_type"] == "HARD"

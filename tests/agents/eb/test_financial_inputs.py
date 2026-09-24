@@ -249,3 +249,19 @@ def test_extracts_cogs_and_charter_capital():
     assert inputs.charter_capital_vnd == 10_000_000_000
     assert evidence["cogs_vnd"].status == "COMPUTED"
     assert evidence["charter_capital_vnd"].status == "COMPUTED"
+
+
+def test_revenue_bctc_vnd_mirrors_net_revenue_vnd_not_a_duplicate_pattern():
+    # Review finding I5: revenue_bctc_vnd used to be its own field code
+    # with a regex byte-identical to IS_REVENUE's, which double-counted
+    # one real conflict as two separate danh_sach_lech entries. It must
+    # still be populated (dsp_reconciliation.py depends on it) by mirroring
+    # net_revenue_vnd's own already-resolved value.
+    from app.extraction.types import ExtractedTable
+
+    table = ExtractedTable(rows=[["Chi tieu", "31/12/2025"], ["Doanh thu thuan", "90105893754"]], sheet_or_page="CDKT")
+    doc = ExtractedDocument(filename="f.xlsx", doc_type="xlsx", text="", tables=[table], extraction_method="spreadsheet", confidence=1.0)
+    canonical = build_canonical([doc])
+    by_year = financial_inputs_by_period(canonical)
+    assert by_year["2025"].inputs.revenue_bctc_vnd == 90_105_893_754.0
+    assert by_year["2025"].inputs.net_revenue_vnd == 90_105_893_754.0

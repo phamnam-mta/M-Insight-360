@@ -131,3 +131,50 @@ def test_build_canonical_no_bctc_sheets_returns_empty_fields_not_error():
     result = build_canonical([doc])
     assert result.fields_by_year == {}
     assert result.sheet_scan[0].included is False
+
+
+def test_build_canonical_same_sheet_multiple_matches_never_hard_blocks():
+    # Review finding C1: a field-pattern regex is a label substring match,
+    # so a real CDKT's "Hang ton kho" (141) and "Du phong giam gia hang ton
+    # kho" (149) both match the same "hang ton kho" pattern within ONE
+    # sheet — that is noise from the sheet's own layout, not a real
+    # cross-source disagreement, and must never hard-block export.
+    table = _bctc_table([
+        ["Chi tieu", "Ma so", "31/12/2025"],
+        ["1. Hang ton kho", "141", "-20"],
+        ["2. Du phong giam gia hang ton kho", "149", "320"],
+    ], sheet="CDKT")
+    doc = ExtractedDocument(filename="f.xlsx", doc_type="xlsx", text="", tables=[table], extraction_method="spreadsheet", confidence=1.0)
+    result = build_canonical([doc])
+    assert result.consistency.khop is True
+    assert result.consistency.danh_sach_lech == []
+    assert result.fields_by_year["2025"]["BS_INVENTORY"].co_gia_tri is False
+
+
+def test_build_canonical_cross_sheet_conflict_still_hard_blocks():
+    sheet_a = _bctc_table([["Chi tieu", "31/12/2025"], ["Von chu so huu", "580965107518"]], sheet="CDKT")
+    sheet_b = _bctc_table([["Chi tieu", "31/12/2025"], ["Von chu so huu", "999999999999"]], sheet="BCTC TOM TAT")
+    doc = ExtractedDocument(filename="f.xlsx", doc_type="xlsx", text="", tables=[sheet_a, sheet_b], extraction_method="spreadsheet", confidence=1.0)
+    result = build_canonical([doc])
+    assert result.consistency.khop is False
+    assert len(result.consistency.danh_sach_lech) == 1
+
+
+def test_classify_sheet_by_name_handles_d_with_stroke():
+    # Review finding C4: NFKD does not decompose Đ/đ, so "CĐKT" (a very
+    # common real sheet name) must still be recognized as a BCTC sheet.
+    table = ExtractedTable(sheet_or_page="CĐKT", rows=[["Chi tieu", "Ma so", "So cuoi nam"]])
+    included, _ = classify_sheet(table)
+    assert included is True
+
+
+def test_classify_sheet_two_labels_now_clears_lowered_threshold():
+    # Review finding C4: a real, terse single-purpose sheet with only 2
+    # populated BCTC labels (no sheet-name signal) must not be entirely
+    # excluded from canonical extraction.
+    table = ExtractedTable(
+        sheet_or_page="Sheet1",
+        rows=[["Tai san ngan han", "293369838619"], ["No ngan han", "165307940854"]],
+    )
+    included, _ = classify_sheet(table)
+    assert included is True

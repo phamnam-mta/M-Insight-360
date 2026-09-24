@@ -14,16 +14,30 @@ def _strip_accents_lower(text: str) -> str:
     return ascii_text.lower()
 
 
+def _is_stt_or_ma_so_like(raw: str) -> bool:
+    """A bare 1-3 digit integer, with no thousands separators — the shape
+    of a row-number (STT) or a BCTC "Mã số" code, never a real financial
+    figure (those always run into the thousands at minimum)."""
+    return bool(re.fullmatch(r"\d{1,3}", raw))
+
+
 def _last_numeric_cell(row: list[str]) -> str | None:
-    """The rightmost cell in a row that is purely a number. Real BCTC rows
-    put the actual figure last, with leading STT/Ma-so columns holding small
-    numbers that a bare regex capture would grab instead (T31: a row like
-    ["10", "Doanh thu thuan", "10", "90105893754"] must never yield 10)."""
-    for cell in reversed(row):
-        stripped = cell.strip()
-        if stripped and re.fullmatch(r"-?[\d.,]+", stripped):
-            return stripped
-    return None
+    """The row's own value cell, skipped past any leading STT/Ma-so code
+    columns. A normal 2-column "label | current | prior" row (no
+    recognized year header) must still yield its FIRST value column, not
+    its rightmost one (that would silently return the PRIOR year's figure
+    instead of the current one) — but a leading STT/Ma-so column (T31: a
+    row like ["10", "Doanh thu thuan", "10", "90105893754"]) must never be
+    captured as the value either. Prefer the first cell that doesn't look
+    like an STT/Ma-so code; only fall back to one that does when every
+    numeric cell in the row looks that way."""
+    numeric_cells = [c.strip() for c in row if c.strip() and re.fullmatch(r"-?[\d.,]+", c.strip())]
+    if not numeric_cells:
+        return None
+    for cell in numeric_cells:
+        if not _is_stt_or_ma_so_like(cell):
+            return cell
+    return numeric_cells[-1]
 
 
 def _extract_value(original: str, stripped_match: re.Match) -> str:
@@ -154,9 +168,15 @@ def find_all_matches_by_period(
             header_idx = 0
             year_columns = detect_year_columns(table.rows[0], primary_year)
             if not year_columns:
+                # Require at least 2 mapped columns (current + prior) to
+                # accept a row found by scanning forward — a trailing
+                # footnote like "Bao cao lap ngay 31/12/2025" maps only its
+                # own single cell and is not a real header; accepting it
+                # would silently exclude every real data row that comes
+                # BEFORE it in the table.
                 for idx, row in enumerate(table.rows):
                     candidate = detect_year_columns(row, primary_year)
-                    if candidate:
+                    if len(candidate) >= 2:
                         header_idx, year_columns = idx, candidate
                         break
             for row_idx, row in enumerate(table.rows[header_idx + 1:], start=header_idx + 1):

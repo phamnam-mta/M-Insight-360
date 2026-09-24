@@ -4,6 +4,15 @@ import { ShieldAlert } from "lucide-react";
 import { ExportGateInfo } from "@/lib/api";
 import { SectionHeader } from "../shared/SectionHeader";
 
+function mismatchLabel(entry: Record<string, unknown>): string {
+  const chiTieu = typeof entry.chi_tieu === "string" ? entry.chi_tieu : "Chỉ tiêu";
+  if (Array.isArray(entry.gia_tri)) {
+    return `${chiTieu}: ${entry.gia_tri.map((v) => (typeof v === "number" ? v.toLocaleString("vi-VN") : String(v))).join(" ≠ ")}`;
+  }
+  if (typeof entry.chi_tiet === "string") return `${chiTieu}: ${entry.chi_tiet}`;
+  return chiTieu;
+}
+
 const VERDICT_LABEL: Record<ExportGateInfo["verdict"], string> = {
   XUAT: "XUẤT TỰ ĐỘNG",
   XUAT_KEM_CANH_BAO: "XUẤT KÈM CẢNH BÁO",
@@ -22,8 +31,14 @@ function formatVnd(v: number | string | null | undefined): string {
 }
 
 export function ExportGateSummaryCard({
-  gate, equityVnd, exportFilename,
-}: { gate: ExportGateInfo; equityVnd?: number | null; exportFilename?: string }) {
+  gate, equityVnd, exportFilename, mismatches,
+}: {
+  gate: ExportGateInfo;
+  equityVnd?: number | null;
+  exportFilename?: string;
+  mismatches?: Record<string, unknown>[];
+}) {
+  const isLechDuLieu = gate.loai_chan === "LECH_DU_LIEU";
   return (
     <div className="bg-white rounded-xl border border-gray-100 p-5 space-y-3">
       <SectionHeader icon={ShieldAlert} title="Cổng chặn xuất tờ trình — S7" />
@@ -52,14 +67,23 @@ export function ExportGateSummaryCard({
           </div>
         )}
         {gate.reasons.length > 0 && <div>Lý do: {gate.reasons.join("; ")}</div>}
-        {gate.loai_chan === "LECH_DU_LIEU" && (
+        {isLechDuLieu && mismatches && mismatches.length > 0 && (
+          <ul className="list-disc list-inside">
+            {mismatches.map((m, i) => (
+              <li key={i}>{mismatchLabel(m)}</li>
+            ))}
+          </ul>
+        )}
+        {isLechDuLieu && (
           <div className="text-[#e0362c]">
             Không có nút ghi đè cho lỗi đọc dữ liệu — chạy lại trích xuất để khắc phục.
           </div>
         )}
       </div>
       <p className="text-xs text-gray-500">
-        Bản nháp. Cán bộ có quyền ghi đè quyết định của cổng chặn kèm lý do; mọi lần ghi đè đều lưu vết.
+        {isLechDuLieu
+          ? "Bản nháp. Lỗi đọc dữ liệu không thể ghi đè — chạy lại trích xuất để khắc phục."
+          : "Bản nháp. Cán bộ có quyền ghi đè quyết định của cổng chặn kèm lý do; mọi lần ghi đè đều lưu vết."}
       </p>
     </div>
   );

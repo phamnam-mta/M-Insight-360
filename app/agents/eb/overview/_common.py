@@ -66,14 +66,27 @@ def condition_from_canonical(
     unit: str | None = "VND",
 ) -> ConditionRow:
     if canonical_field is None or not canonical_field.co_gia_tri:
+        # A field can be "no value yet" for two different reasons: never
+        # matched at all (no evidence — genuinely MISSING_DATA), or matched
+        # with conflicting values (evidence present — PENDING_REVIEW). The
+        # two blocks (this one and financial_inputs_by_period) must agree
+        # on which one it is for the same underlying CanonicalField.
+        has_evidence = bool(canonical_field and canonical_field.evidence)
         observed = EvidencedField(
             field_id=condition_name, label=condition_name, value=None, unit=unit,
-            period=canonical_field.nam if canonical_field else None, status="MISSING_DATA",
+            period=canonical_field.nam if canonical_field else None,
+            status="PENDING_REVIEW" if has_evidence else "MISSING_DATA",
+            evidence=canonical_field.evidence if canonical_field else [],
+        )
+        reason = (
+            f"Các nguồn cho '{condition_name}' khác nhau — cần cán bộ xác nhận trước khi kết luận."
+            if has_evidence
+            else f"Không tìm thấy dữ liệu cho '{condition_name}' trong hồ sơ đã tải lên."
         )
         return ConditionRow(
             condition_id=condition_id, condition_name=condition_name, observed=observed,
             compare_rule=compare_rule_text, result="INSUFFICIENT_DATA",
-            reason_if_incomplete=f"Không tìm thấy dữ liệu cho '{condition_name}' trong hồ sơ đã tải lên.",
+            reason_if_incomplete=reason,
         )
     value = canonical_field.gia_tri
     observed = EvidencedField(

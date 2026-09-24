@@ -46,7 +46,11 @@ _FIELD_PATTERNS: dict[str, re.Pattern] = {
     # profitability.py, stress_test.py, dsp_reconciliation.py and
     # capital_structure.py keep receiving real values through
     # financial_inputs_by_period instead of silently going to None.
-    "_REVENUE_BCTC": re.compile(r"doanh thu thuan[:\s]*(-?[\d.,]+)"),
+    # revenue_bctc_vnd is NOT a separate pattern here — its regex was
+    # byte-identical to IS_REVENUE's; a duplicate pattern would double
+    # count as two conflicting-value entries for one real disagreement and
+    # inflate classify_sheet's content-hit tally. financial_inputs_by_period
+    # mirrors IS_REVENUE's value into revenue_bctc_vnd instead.
     "_REVENUE_DSP": re.compile(r"doanh thu (?:digisale|dsp)[:\s]*(-?[\d.,]+)"),
     "_INTEREST_DUE": re.compile(r"lai den han[:\s]*(-?[\d.,]+)"),
     "_EBIT": re.compile(r"ebit\)?[:\s]*(-?[\d.,]+)"),
@@ -80,7 +84,6 @@ FIELD_CODE_MAP: dict[str, str | None] = {
     "BS_CASH": "cash_vnd",
     "DEBT_PRINCIPAL_DUE": "principal_due_vnd",
     "CFO": "cfo_vnd",
-    "_REVENUE_BCTC": "revenue_bctc_vnd",
     "_REVENUE_DSP": "revenue_dsp_vnd",
     "_INTEREST_DUE": "interest_due_vnd",
     "_EBIT": "ebit_vnd",
@@ -97,10 +100,15 @@ LEGACY_ALIAS: dict[str, str] = {
 }
 
 _BCTC_SHEET_NAME_MARKERS = (
-    "bctc", "cdkt", "kqkd", "lctt", "can doi ke toan", "ket qua kinh doanh",
-    "luu chuyen tien te", "tom tat",
+    "bctc", "cdkt", "kqkd", "kqhdkd", "lctt", "can doi ke toan", "ket qua kinh doanh",
+    "ket qua hoat dong kinh doanh", "luu chuyen tien te", "tom tat",
+    "bao cao tai chinh", "balance sheet", "income statement",
 )
-_MIN_CONTENT_HITS_FOR_INCLUSION = 3
+# 2, not 3 — a real BCTC sheet with a terse, unusually-named title can
+# legitimately carry only a couple of the standard line items (Review
+# Focus #2); requiring 3 excluded real single-purpose sheets (e.g. a CDKT
+# with only 2 populated rows) entirely from canonical extraction.
+_MIN_CONTENT_HITS_FOR_INCLUSION = 2
 
 
 @dataclass
@@ -138,6 +146,10 @@ class CanonicalResult:
 
 
 def _strip_accents_lower(text: str) -> str:
+    # NFKD has no decomposition for Đ/đ (it isn't a base-letter-plus-
+    # combining-mark in Unicode) — without this, sheet names like "CĐKT"
+    # or "Bảng cân đối kế toán" never match any BCTC name marker.
+    text = text.replace("Đ", "D").replace("đ", "d")
     normalized = unicodedata.normalize("NFKD", text)
     return "".join(c for c in normalized if not unicodedata.combining(c)).lower()
 
@@ -164,6 +176,11 @@ _LABELS_VN: dict[str, str] = {
     "BS_CASH": "Tiền và tương đương tiền",
     "DEBT_PRINCIPAL_DUE": "Nợ gốc đến hạn",
     "CFO": "Lưu chuyển tiền thuần từ HĐKD",
+    "_REVENUE_DSP": "Doanh thu DigiSale",
+    "_INTEREST_DUE": "Lãi đến hạn",
+    "_EBIT": "EBIT",
+    "_FINANCE_LEASE_DEBT": "Nợ thuê tài chính",
+    "_TOTAL_PRINCIPAL_DUE": "Tổng nợ gốc đến hạn",
 }
 
 
@@ -183,6 +200,14 @@ def classify_sheet(table: ExtractedTable) -> tuple[bool, str]:
         return True, f"Nội dung khớp {hits} chỉ tiêu BCTC chuẩn"
 
     return False, "Không khớp tên sheet BCTC và nội dung không đạt ngưỡng chỉ tiêu tài chính"
+
+
+_LOCATION_SHEET_RE = re.compile(r"^Sheet '(.*)', dòng \d+$")
+
+
+def _sheet_of(ref: EvidenceRef) -> str | None:
+    match = _LOCATION_SHEET_RE.match(ref.location)
+    return match.group(1) if match else None
 
 
 def _filtered_document(doc: ExtractedDocument, included_tables: list[ExtractedTable]) -> ExtractedDocument:
@@ -243,7 +268,13 @@ def build_canonical(
     # dropped.
     filtered_documents = []
     for doc, tables in included_tables_by_doc:
-        if not doc.tables:
+        if doc.doc_type != "xlsx":
+            # Every table in a non-xlsx document is already included
+            # unconditionally above — rebuilding `text` from just its
+            # tables (via _filtered_document) would silently drop real
+            # narrative prose alongside a docx's own tables (a docx BCTC
+            # can carry its own figures as text, not only in a table).
+            # Pass it through completely unchanged.
             filtered_documents.append(doc)
         elif tables:
             filtered_documents.append(_filtered_document(doc, tables))
@@ -262,11 +293,21 @@ def build_canonical(
             refs = [ref for ref, _, _ in refs_and_raw]
             year_fields = fields_by_year.setdefault(year, {})
             if len(distinct_values) > 1:
-                conflicts.append({
-                    "chi_tieu": _LABELS_VN.get(ma, ma),
-                    "gia_tri": sorted(distinct_values),
-                    "nam": year,
-                })
+                # A field-pattern regex is a label substring match, so two
+                # DIFFERENT real line items in the SAME sheet can both hit
+                # the same pattern (e.g. "Hàng tồn kho" and "Dự phòng giảm
+                # giá hàng tồn kho" both match "hang ton kho") — that is
+                # noise from one sheet's own layout, not a real
+                # cross-source disagreement, and must never hard-block
+                # export. Only flag a genuine LECH_DU_LIEU conflict when
+                # the differing values trace back to more than one sheet.
+                distinct_sheets = {_sheet_of(ref) for ref in refs}
+                if len(distinct_sheets) > 1:
+                    conflicts.append({
+                        "chi_tieu": _LABELS_VN.get(ma, ma),
+                        "gia_tri": sorted(distinct_values),
+                        "nam": year,
+                    })
                 year_fields[ma] = CanonicalField(
                     ma=ma,
                     nhan=_LABELS_VN.get(ma, ma),
@@ -281,7 +322,7 @@ def build_canonical(
                 )
             else:
                 value = parse_vn_number(refs_and_raw[0][1])
-                sheet = refs[0].location.split("'")[1] if "'" in refs[0].location else None
+                sheet = _sheet_of(refs[0])
                 year_fields[ma] = CanonicalField(
                     ma=ma,
                     nhan=_LABELS_VN.get(ma, ma),

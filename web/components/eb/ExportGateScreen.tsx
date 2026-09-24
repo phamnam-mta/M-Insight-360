@@ -3,14 +3,24 @@
 import { AlertTriangle } from "lucide-react";
 import { ExportGateInfo } from "@/lib/api";
 
+function mismatchLabel(entry: Record<string, unknown>): string {
+  const chiTieu = typeof entry.chi_tieu === "string" ? entry.chi_tieu : "Chỉ tiêu";
+  if (Array.isArray(entry.gia_tri)) {
+    return `${chiTieu}: ${entry.gia_tri.map((v) => (typeof v === "number" ? v.toLocaleString("vi-VN") : String(v))).join(" ≠ ")}`;
+  }
+  if (typeof entry.chi_tiet === "string") return `${chiTieu}: ${entry.chi_tiet}`;
+  return chiTieu;
+}
+
 export function ExportGateScreen({
-  gate, onClose, onForceExport, onRerun, exporting,
+  gate, onClose, onForceExport, onRerun, exporting, mismatches,
 }: {
   gate: ExportGateInfo;
   onClose: () => void;
   onForceExport: () => void;
   onRerun?: () => void;
   exporting: boolean;
+  mismatches?: Record<string, unknown>[];
 }) {
   const isLechDuLieu = gate.loai_chan === "LECH_DU_LIEU";
   const canOverride = gate.block_type === "SOFT" && !isLechDuLieu;
@@ -36,15 +46,28 @@ export function ExportGateScreen({
             <li key={`r-${i}`} className="text-red-700">{r}</li>
           ))}
         </ul>
-        <div>
-          <p className="text-sm font-medium text-msb-navy">Việc cần làm trước khi trình:</p>
-          <ul className="text-sm text-gray-600 list-disc list-inside">
-            <li>Lấy lịch trả nợ chi tiết</li>
-            <li>Bảng tuổi nợ phải thu</li>
-            <li>Xác minh cơ cấu kỳ hạn nợ</li>
-            <li>Bổ sung nguồn trả nợ / tài sản đảm bảo</li>
-          </ul>
-        </div>
+        {isLechDuLieu ? (
+          mismatches && mismatches.length > 0 && (
+            <div>
+              <p className="text-sm font-medium text-msb-navy">Chỉ tiêu chưa khớp:</p>
+              <ul className="text-sm text-gray-600 list-disc list-inside">
+                {mismatches.map((m, i) => (
+                  <li key={i}>{mismatchLabel(m)}</li>
+                ))}
+              </ul>
+            </div>
+          )
+        ) : (
+          <div>
+            <p className="text-sm font-medium text-msb-navy">Việc cần làm trước khi trình:</p>
+            <ul className="text-sm text-gray-600 list-disc list-inside">
+              <li>Lấy lịch trả nợ chi tiết</li>
+              <li>Bảng tuổi nợ phải thu</li>
+              <li>Xác minh cơ cấu kỳ hạn nợ</li>
+              <li>Bổ sung nguồn trả nợ / tài sản đảm bảo</li>
+            </ul>
+          </div>
+        )}
         <p className="text-[11px] text-gray-400 border-t pt-3">
           Khuyến nghị sơ bộ từ dữ liệu BCTC — cần phê duyệt theo quy trình tín dụng MSB.
         </p>

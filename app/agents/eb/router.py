@@ -367,19 +367,25 @@ async def export(payload: dict) -> Response:
     equity_vnd = (computed.get("financial_inputs") or {}).get("equity_vnd")
     sanity_check = computed.get("sanity_check") or {}
     consistency = computed.get("consistency") or {}
+    sheet_scan = computed.get("sheet_scan") or []
     # S7.2(f): re-check the same combined consistency signal /assess
     # computed — a same-year cross-sheet conflict (canonical.consistency)
     # or a balance sheet that doesn't balance are both document defects,
     # never force-overridable.
     khop = consistency.get("khop", True) and not sanity_check.get("balance_mismatch")
+    # Review Focus #5, re-checked here too: /assess's own HARD block for a
+    # zero-BCTC-sheet upload must not be bypassable by re-posting the same
+    # `computed` to /export with force=true.
+    no_bctc_sheet_included = bool(sheet_scan) and not any(s.get("included") for s in sheet_scan)
 
     gate = evaluate_export_gate(
         risk_flags, equity_vnd=equity_vnd, dscr=dscr, icr=icr,
         # Same S7.2(a) hard-block as /assess: a balance sheet that
-        # doesn't balance is a document defect, never overridable by
-        # force — the re-posted `computed` carries /assess's own
-        # sanity_check verdict, so this must be re-checked here too.
-        pre_check_blocked=not khop,
+        # doesn't balance, or an upload with no BCTC-included sheet at
+        # all, are both document defects, never overridable by force —
+        # the re-posted `computed` carries /assess's own verdicts, so
+        # both must be re-checked here too.
+        pre_check_blocked=(not khop) or no_bctc_sheet_included,
         loai_chan="LECH_DU_LIEU" if not khop else None,
     )
 

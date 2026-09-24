@@ -97,3 +97,23 @@ def test_gross_profit_less_interest_reads_canonical():
     row = evaluate_gross_profit_less_interest(canonical.fields_by_year["2025"])
     assert row.observed.value == 15_000_000_000.0
     assert row.result == "PASS"
+
+
+def test_equity_condition_reports_pending_review_not_missing_when_conflicting():
+    # Review finding I6: financial_inputs_by_period marks a conflicting
+    # field PENDING_REVIEW; the condition block used to always say
+    # MISSING_DATA ("khong tim thay du lieu") for the same underlying
+    # CanonicalField, which is a wrong and contradictory message when the
+    # data DID exist but disagreed across sheets.
+    from app.agents.eb.canonical import CanonicalField
+    from app.engine.core.types import EvidenceRef
+
+    conflicting_field = CanonicalField(
+        ma="BS_EQUITY", nhan="Vốn chủ sở hữu", gia_tri=None, don_vi="VND", nam="2025",
+        nguon=None, sheet=None, loai="chua_co", co_gia_tri=False,
+        evidence=[EvidenceRef(file_id="f", filename="f.xlsx", location="Sheet 'A', dòng 1", original_text="x")],
+    )
+    row = evaluate_equity({"BS_EQUITY": conflicting_field})
+    assert row.result == "INSUFFICIENT_DATA"
+    assert row.observed.status == "PENDING_REVIEW"
+    assert "khác nhau" in row.reason_if_incomplete

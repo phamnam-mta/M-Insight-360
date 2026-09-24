@@ -65,6 +65,12 @@ def financial_inputs_by_period(canonical: CanonicalResult) -> dict[str, PeriodEx
                 continue
             values[attr] = cf.gia_tri
             evidence[attr] = FieldEvidence(status="COMPUTED", evidence=cf.evidence)
+        # revenue_bctc_vnd is the same concept as net_revenue_vnd (dsp_
+        # reconciliation.py compares it against revenue_dsp_vnd) — no
+        # separate canonical field code for it, see canonical.py's comment.
+        if "net_revenue_vnd" in values:
+            values["revenue_bctc_vnd"] = values["net_revenue_vnd"]
+            evidence["revenue_bctc_vnd"] = evidence["net_revenue_vnd"]
         result[year] = PeriodExtraction(year=year, inputs=EbFinancialInputs(**values), field_evidence=evidence)
     return result
 

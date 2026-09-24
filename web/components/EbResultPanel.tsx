@@ -242,6 +242,14 @@ export default function EbResultPanel({
     if (gate.verdict === "XUAT_KEM_CANH_BAO") {
       return { label: "Xuất tờ trình MB02a ⚠", sub: `${gate.signal_count} tín hiệu cần thẩm định thêm — bản nháp sẽ có banner cảnh báo`, cls: "bg-msb-orange text-white", disabled: false };
     }
+    if (gate.loai_chan === "LECH_DU_LIEU") {
+      // Never disabled — the button must stay clickable so the officer can
+      // open the gate screen and see which fields disagree, then rerun
+      // extraction. A permanently-disabled button here would make the
+      // LECH_DU_LIEU screen (and its "Chạy lại trích xuất" action)
+      // unreachable.
+      return { label: "Xuất tờ trình MB02a", sub: "Dữ liệu giữa các khối chưa khớp nhau — xem chi tiết", cls: "bg-gray-200 text-gray-600", disabled: false };
+    }
     if (gate.block_type === "HARD") {
       return { label: "Xuất tờ trình MB02a", sub: "Hồ sơ khách hàng cung cấp chưa đầy đủ — đề nghị bổ sung bản chuẩn", cls: "bg-gray-200 text-gray-400", disabled: true };
     }
@@ -390,6 +398,7 @@ export default function EbResultPanel({
               gate={gate}
               equityVnd={result.financial_inputs?.equity_vnd ?? null}
               exportFilename={`TTTD_..._${result.ho_so_period?.selected ?? ""}_..._BANNHAP.docx`}
+              mismatches={result.consistency?.danh_sach_lech}
             />
           )}
           <div data-testid="eb-r1-panel" className="bg-white rounded-lg shadow-sm border border-gray-100 p-6 space-y-3">
@@ -447,6 +456,7 @@ export default function EbResultPanel({
               ? () => onRerunWithPeriod?.(result.ho_so_period!.selected!)
               : undefined
           }
+          mismatches={result.consistency?.danh_sach_lech}
           exporting={exporting}
         />
       )}

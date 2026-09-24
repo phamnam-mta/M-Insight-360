@@ -13,8 +13,8 @@ import unicodedata
 from .types import ExtractedDocument, ExtractedTable
 
 _YEAR_RE = re.compile(r"\b(20\d{2})\b")
-_CURRENT_LABELS = ("so cuoi nam", "cuoi ky", "cuoi nam", "nam nay")
-_PRIOR_LABELS = ("so dau nam", "dau ky", "dau nam", "nam truoc")
+_CURRENT_LABELS = ("so cuoi nam", "cuoi ky", "cuoi nam", "nam nay", "ky nay")
+_PRIOR_LABELS = ("so dau nam", "dau ky", "dau nam", "nam truoc", "ky truoc")
 
 
 def _strip_accents_lower(text: str) -> str:

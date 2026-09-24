@@ -225,6 +225,16 @@ export type CotNam = {
   nam_can_nguoi_dung_xac_nhan: boolean;
 };
 export type ConsistencyInfo = { khop: boolean; danh_sach_lech: Record<string, unknown>[] };
+export type CanonicalFieldInfo = {
+  nhan: string;
+  gia_tri: number | null;
+  don_vi: string;
+  nam: string | null;
+  nguon: string | null;
+  sheet: string | null;
+  loai: string;
+  co_gia_tri: boolean;
+};
 
 export type ExportResult =
   | { blocked: true; gate: ExportGateInfo }
@@ -257,6 +267,7 @@ export type AssessmentResult = {
   sheet_scan?: SheetScanRow[];
   cot_nam?: CotNam;
   consistency?: ConsistencyInfo;
+  canonical?: Record<string, CanonicalFieldInfo>;
   // Cross-sell v3.1 fields — see comment above.
   status?: "ok" | "partial" | "blocked" | "error";
   request_id?: string;
