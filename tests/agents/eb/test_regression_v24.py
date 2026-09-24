@@ -112,3 +112,78 @@ def test_t33_force_cannot_bypass_data_mismatch_block(monkeypatch, tmp_path):
     body = resp.json()
     assert body["loai_chan"] == "LECH_DU_LIEU"
     assert body["block_type"] == "HARD"
+
+
+def _real_alpha_group_full_workbook() -> io.BytesIO:
+    """A workbook mirroring a real uploaded BCTC (Mẫu B01-DN/B02-DN/B03-DN,
+    Thông tư 200/2014/TT-BTC) verified against this session's actual
+    upload, exact mã số/labels/figures, plus a bundled bank-statement
+    sheet reproducing the original incident's shape."""
+    wb = openpyxl.Workbook()
+    cdkt = wb.active
+    cdkt.title = "CĐKT"
+    cdkt.append(["BẢNG CÂN ĐỐI KẾ TOÁN"])
+    cdkt.append(["Tại ngày 31 tháng 12 năm 2025"])
+    cdkt.append(["TÀI SẢN", "Mã số", "Thuyết minh", "Số cuối năm", "Số đầu năm"])
+    cdkt.append(["A - TÀI SẢN NGẮN HẠN", "100", "", 293369838619, 211204710746])
+    cdkt.append(["I. Tiền và các khoản tương đương tiền", "110", "", 624458391, 25457970])
+    cdkt.append(["1. Phải thu ngắn hạn của khách hàng", "131", "", 1030523666, 6970818056])
+    cdkt.append(["1. Hàng tồn kho", "141", "", 13676836829, 11441820291])
+    cdkt.append(["2. Dự phòng giảm giá hàng tồn kho (*)", "149", "", 0, 0])
+    cdkt.append(["B - TÀI SẢN DÀI HẠN", "200", "", 576704461430, 572855142017])
+    cdkt.append(["C - NỢ PHẢI TRẢ", "300", "", 289109192531, 203118013011])
+    cdkt.append(["I. Nợ ngắn hạn", "310", "", 165307940854, 203118013011])
+    cdkt.append(["10. Vay và nợ thuê tài chính ngắn hạn", "320", "", 78810636239, 82915982025])
+    cdkt.append(["8. Vay và nợ thuê tài chính dài hạn", "338", "", 0, 0])
+    cdkt.append(["D - VỐN CHỦ SỞ HỮU", "400", "", 580965107518, 580941839752])
+    cdkt.append(["1. Vốn góp của chủ sở hữu", "411", "", 580000000000, 580000000000])
+
+    kqkd = wb.create_sheet("KQKD")
+    kqkd.append(["BÁO CÁO KẾT QUẢ HOẠT ĐỘNG KINH DOANH"])
+    kqkd.append(["Kỳ tính thuế: Năm 2025"])
+    kqkd.append(["Chỉ tiêu", "Mã số", "Thuyết minh", "Năm nay", "Năm trước"])
+    kqkd.append(["3. Doanh thu thuần về bán hàng và cung cấp dịch vụ", "10", "", 90105893754, 75087670552])
+    kqkd.append(["4. Giá vốn hàng bán", "11", "", 73340931618, 62244286018])
+    kqkd.append(["5. Lợi nhuận gộp về bán hàng và cung cấp dịch vụ", "20", "", 16764962136, 12843384534])
+    kqkd.append(["- Trong đó: Chi phí lãi vay", "23", "", 12131595580, 6600912167])
+    kqkd.append(["14. Tổng lợi nhuận kế toán trước thuế", "50", "", 29084707, 79966510])
+    kqkd.append(["17. Lợi nhuận sau thuế thu nhập doanh nghiệp", "60", "", 23267766, 63973208])
+
+    lctt = wb.create_sheet("LCTT")
+    lctt.append(["BÁO CÁO LƯU CHUYỂN TIỀN TỆ"])
+    lctt.append(["Kỳ tính thuế: Năm 2025"])
+    lctt.append(["Chỉ tiêu", "Mã số", "Thuyết minh", "Năm nay", "Năm trước"])
+    lctt.append(["Lưu chuyển tiền thuần từ hoạt động kinh doanh", "20", "", 8624346207, "(68.201.460.796)"])
+
+    saoke = wb.create_sheet("SAO KE")
+    saoke.append(["Ngày GD", "Diễn giải", "Số tiền"])
+    for d in range(1, 15):
+        saoke.append([f"{d:02d}/01/2026", f"Giao dịch {d}", 1_000_000 * d])
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf
+
+
+def test_real_bctc_structure_end_to_end_extracts_all_three_statements(monkeypatch, tmp_path):
+    """End-to-end proof (Mã số extraction + parenthesized negatives + Đ/đ
+    fix, all together) that a real, official-format BCTC no longer goes
+    silently "Chưa có dữ liệu" across the board — the exact failure mode
+    reported against the live product this session."""
+    resp = _assess(monkeypatch, tmp_path, "real_bctc", _real_alpha_group_full_workbook())
+    body = resp.json()
+    fi = body["financial_inputs"]
+    assert body["ho_so_period"]["selected"] == "2025"
+    assert fi["equity_vnd"] == 580965107518.0
+    assert fi["net_revenue_vnd"] == 90105893754.0
+    assert fi["cogs_vnd"] == 73340931618.0
+    assert fi["gross_profit_vnd"] == 16764962136.0
+    assert fi["interest_expense_vnd"] == 12131595580.0
+    assert fi["pbt_vnd"] == 29084707.0
+    assert fi["pat_vnd"] == 23267766.0
+    assert fi["cfo_vnd"] == 8624346207.0
+    assert fi["short_term_debt_vnd"] == 78810636239.0
+    assert body["consistency"]["khop"] is True
+    sheet_names = {s["sheet"]: s["included"] for s in body["sheet_scan"]}
+    assert sheet_names["SAO KE"] is False

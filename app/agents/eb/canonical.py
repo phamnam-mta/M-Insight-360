@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from app.engine.core.numbers import parse_vn_number
 from app.engine.core.types import EvidenceRef
 from app.extraction.evidence_search import find_all_matches_by_period
+from app.extraction.period_columns import detect_table_primary_year, detect_year_columns
 from app.extraction.types import ExtractedDocument, ExtractedTable
 
 # Moved here from financial_inputs.py (was duplicated independently by every
@@ -104,6 +105,55 @@ _BCTC_SHEET_NAME_MARKERS = (
     "ket qua hoat dong kinh doanh", "luu chuyen tien te", "tom tat",
     "bao cao tai chinh", "balance sheet", "income statement",
 )
+
+# Mã số → field code, scoped per statement type — verified against a real
+# uploaded BCTC (Mẫu B01-DN/B02-DN/B03-DN, Thông tư 200/2014/TT-BTC) this
+# session. Mã số is NOT a global key: mã "20" means "Lợi nhuận gộp" in
+# KQKD but "Lưu chuyển tiền thuần từ HĐKD" in LCTT, so a table's statement
+# type must be known before its Mã số column is trusted. Only fields
+# confirmed exact against that real file are listed — mã số varies more
+# than commonly assumed between accounting software packages (the same
+# file used mã 25/26 for "Chi phí bán hàng"/"Chi phí quản lý doanh
+# nghiệp" instead of the more commonly cited 24/25), so an unconfirmed
+# guess is worse than falling back to label matching.
+_MA_SO_MAP: dict[str, dict[str, str]] = {
+    "cdkt": {
+        "100": "BS_CURRENT_ASSETS",
+        "110": "BS_CASH",
+        "131": "BS_AR_CUSTOMER",
+        "141": "BS_INVENTORY",
+        "200": "BS_NON_CURRENT_ASSETS",
+        "300": "BS_TOTAL_LIABILITIES",
+        "310": "BS_CURRENT_LIABILITIES",
+        "320": "BS_ST_BORROWINGS",
+        "338": "BS_LT_BORROWINGS",
+        "400": "BS_EQUITY",
+        "411": "BS_CHARTER_CAPITAL",
+    },
+    "kqkd": {
+        "10": "IS_REVENUE",
+        "11": "IS_COGS",
+        "20": "IS_GROSS_PROFIT",
+        "23": "IS_INTEREST",
+        "50": "IS_PBT",
+        "60": "IS_PAT",
+    },
+    "lctt": {
+        "20": "CFO",
+    },
+}
+
+_STATEMENT_NAME_MARKERS: dict[str, tuple[str, ...]] = {
+    "cdkt": ("cdkt", "can doi ke toan", "b01", "bang can doi ke toan", "balance sheet"),
+    "kqkd": ("kqkd", "kqhdkd", "ket qua kinh doanh", "ket qua hoat dong kinh doanh", "b02", "income statement"),
+    "lctt": ("lctt", "luu chuyen tien te", "b03", "cash flow"),
+}
+_STATEMENT_CONTENT_MARKERS: dict[str, str] = {
+    "cdkt": "tai san ngan han",
+    "kqkd": "doanh thu ban hang va cung cap dich vu",
+    "lctt": "luu chuyen tien thuan tu hoat dong kinh doanh",
+}
+_MA_SO_HEADER_LABEL = "ma so"
 # 2, not 3 — a real BCTC sheet with a terse, unusually-named title can
 # legitimately carry only a couple of the standard line items (Review
 # Focus #2); requiring 3 excluded real single-purpose sheets (e.g. a CDKT
@@ -202,6 +252,94 @@ def classify_sheet(table: ExtractedTable) -> tuple[bool, str]:
     return False, "Không khớp tên sheet BCTC và nội dung không đạt ngưỡng chỉ tiêu tài chính"
 
 
+def _detect_statement_type(table: ExtractedTable) -> str | None:
+    """Which of CĐKT / KQKD / LCTT a table is — Mã số is only unambiguous
+    once this is known (see _MA_SO_MAP's own comment)."""
+    name_stripped = _strip_accents_lower(table.sheet_or_page)
+    for statement_type, markers in _STATEMENT_NAME_MARKERS.items():
+        if any(marker in name_stripped for marker in markers):
+            return statement_type
+
+    haystack = _strip_accents_lower(" ".join(" ".join(row) for row in table.rows))
+    for statement_type, marker in _STATEMENT_CONTENT_MARKERS.items():
+        if marker in haystack:
+            return statement_type
+    return None
+
+
+def _find_ma_so_column(header_row: list[str]) -> int | None:
+    for i, cell in enumerate(header_row):
+        if _strip_accents_lower(cell).strip() == _MA_SO_HEADER_LABEL:
+            return i
+    return None
+
+
+def _normalize_ma_so(raw: str) -> str:
+    """"10", "10.0" (a numeric xlsx cell stringified with a trailing
+    ".0") and " 10 " must all key the same way into _MA_SO_MAP."""
+    stripped = raw.strip()
+    try:
+        return str(int(float(stripped)))
+    except ValueError:
+        return stripped
+
+
+def _extract_by_ma_so(
+    table: ExtractedTable, statement_type: str, file_id: str, filename: str,
+) -> list[tuple[str, EvidenceRef, str, str, str]]:
+    """Reads a table's own "Mã số" column to identify each row's field
+    code directly — exact and unambiguous, unlike a label regex, which
+    can match several different real line items sharing a substring
+    (T31/C1: "Hàng tồn kho" mã 141 vs "Dự phòng giảm giá hàng tồn kho" mã
+    149 both contain "hàng tồn kho"). Falls back to nothing (never
+    raises) when the table has no recognizable header — build_canonical's
+    existing label-regex path still covers those tables."""
+    ma_so_map = _MA_SO_MAP.get(statement_type)
+    if not ma_so_map or not table.rows:
+        return []
+
+    header_idx: int | None = None
+    ma_so_col: int | None = None
+    year_columns: dict[int, str] = {}
+    primary_year = detect_table_primary_year(table)
+    for idx, row in enumerate(table.rows):
+        col = _find_ma_so_column(row)
+        if col is None:
+            continue
+        candidate_years = detect_year_columns(row, primary_year)
+        if len(candidate_years) >= 2:
+            header_idx, ma_so_col, year_columns = idx, col, candidate_years
+            break
+
+    if header_idx is None or ma_so_col is None or not year_columns:
+        return []
+
+    results: list[tuple[str, EvidenceRef, str, str, str]] = []
+    for row_idx, row in enumerate(table.rows[header_idx + 1 :], start=header_idx + 1):
+        if ma_so_col >= len(row):
+            continue
+        field_code = ma_so_map.get(_normalize_ma_so(row[ma_so_col]))
+        if field_code is None:
+            continue
+        joined = " | ".join(row)
+        for col_idx, year in year_columns.items():
+            if col_idx >= len(row):
+                continue
+            cell = row[col_idx]
+            if not cell or (parse_vn_number(cell) == 0.0 and not any(ch.isdigit() for ch in cell)):
+                continue
+            results.append((
+                field_code,
+                EvidenceRef(
+                    file_id=file_id, filename=filename,
+                    location=f"Sheet '{table.sheet_or_page}', dòng {row_idx + 1}",
+                    original_text=joined, period=year,
+                ),
+                cell, year, "ma_so",
+            ))
+    return results
+
+
 _LOCATION_SHEET_RE = re.compile(r"^Sheet '(.*)', dòng \d+$")
 
 
@@ -260,6 +398,29 @@ def build_canonical(
                 included_tables.append(table)
         included_tables_by_doc.append((doc, included_tables))
 
+    # Mã số extraction runs first, directly against each included xlsx
+    # table's own rows — exact and unambiguous once a table's statement
+    # type (CĐKT/KQKD/LCTT) is known. A field code it resolves for a given
+    # sheet is recorded so the label-regex pass below never re-reads that
+    # same sheet for that same field — running both on the same sheet
+    # would reintroduce exactly the same-sheet-ambiguity problem Mã số
+    # extraction exists to avoid (T31/C1).
+    ma_so_matches: dict[str, list[tuple]] = {}
+    ma_so_resolved_sheets: dict[str, set[str]] = {}
+    for doc, tables in included_tables_by_doc:
+        if doc.doc_type != "xlsx":
+            continue
+        file_id = getattr(doc, "file_id", doc.filename)
+        for table in tables:
+            statement_type = _detect_statement_type(table)
+            if statement_type is None:
+                continue
+            for field_code, ref, raw, year, confidence in _extract_by_ma_so(
+                table, statement_type, file_id, doc.filename
+            ):
+                ma_so_matches.setdefault(field_code, []).append((ref, raw, year, confidence))
+                ma_so_resolved_sheets.setdefault(field_code, set()).add(table.sheet_or_page)
+
     # classify_sheet only has sheets to classify when a document HAS tables.
     # A pure-text upload (a PDF/docx BCTC with no table structure at all —
     # e.g. the existing tests' PDF fixtures) has nothing to scan and must
@@ -283,9 +444,14 @@ def build_canonical(
     conflicts: list[dict] = []
 
     for ma, pattern in _FIELD_PATTERNS.items():
-        matches = find_all_matches_by_period(filtered_documents, pattern)
+        resolved_sheets = ma_so_resolved_sheets.get(ma, set())
+        regex_matches = find_all_matches_by_period(filtered_documents, pattern)
         by_year_raw: dict[str, list[tuple]] = {}
-        for ref, raw, year, confidence in matches:
+        for ref, raw, year, confidence in regex_matches:
+            if _sheet_of(ref) in resolved_sheets:
+                continue
+            by_year_raw.setdefault(year, []).append((ref, raw, confidence))
+        for ref, raw, year, confidence in ma_so_matches.get(ma, []):
             by_year_raw.setdefault(year, []).append((ref, raw, confidence))
 
         for year, refs_and_raw in by_year_raw.items():
@@ -331,7 +497,7 @@ def build_canonical(
                     nam=year,
                     nguon=refs[0].original_text,
                     sheet=sheet,
-                    loai="trich_xuat" if refs_and_raw[0][2] == "explicit" else "uoc_tinh",
+                    loai="trich_xuat" if refs_and_raw[0][2] in ("explicit", "ma_so") else "uoc_tinh",
                     co_gia_tri=True,
                     evidence=refs,
                 )
